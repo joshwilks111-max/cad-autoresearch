@@ -16,21 +16,29 @@ proposer, no orchestrator/watcher). 8/16 tasks solved >= 0.95 (mean composite of
 | 7 | thinwall_box | easy | spec | 0.993 | 11 | solved |
 | 8 | nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, round washer) |
 | 9 | nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) |
-| 10 | nist_stc_06 | hard | drawing | 0.666 | 144 | real partial (drawing track) |
+| 10 | nist_ctc_05 | hard | drawing | 0.646 | 156 | real partial (profile WIP, vol +14%) |
+| 11 | nist_stc_06 | hard | drawing | 0.628 | 144 | real partial (drawing track) |
 | - | pulley_vgroove | easy | spec | 0.560b | 13 | scaffolded (round, baseline) |
 | - | slotted_ring | easy | spec | 0.415b | 33 | scaffolded (round, baseline) |
 | - | flanged_bushing | easy | spec | 0.316b | 10 | scaffolded (round, baseline) |
 | - | nist_ftc_07 | hard | drawing | ~0.24b | 306 | bbox baseline (3 shells, multibody) |
-| - | nist_ctc_05 | hard | drawing | ~0.19b | 156 | bbox baseline (next real target) |
 | - | nist_ctc_03 | medium | drawing | ~0.17b | 120 | bbox baseline (thin-wall lattice) |
 
 `b` = baseline only (featureless box/cylinder; no real reconstruction yet). The 3
 `*_vgroove/_ring/_bushing` round parts are scaffolded + confirmed on the cylindrical-IoU
-path, all reachable to >=0.95 — they are queued quick wins. The 3 remaining `nist_*`
-hard parts are bbox baselines; per the difficulty survey the next real-part target is
-**nist_ctc_05** (single solid, one dominant central bore, euler=27 — genuinely
-spec-track-reachable), NOT ftc_07 (3-shell multibody, OCC fragment hazard) or ctc_03
-(1.4% fill thin-wall lattice, euler=95).
+path, all reachable to >=0.95 — they are queued quick wins. The 2 remaining `nist_*`
+hard parts (ftc_07, ctc_03) are bbox baselines; ftc_07 is a 3-shell multibody (OCC
+fragment hazard) and ctc_03 a 1.4%-fill thin-wall lattice (euler=95) — both deferred.
+
+**nist_ctc_05 (0.646, real partial, WIP):** a large coaxial stepped turning (tiered
+lathe shaft: O558.8 base flange -> conical shoulder -> O304.8 tower -> conical skirt ->
+O63.5 spindle, central bore + 10 counterbored bolt holes), reconstructed by measuring
+the GT cross-sections (no answer-key read). Watertight; vol/bbox/chamfer/siou all land
+(bbox 0.939, cham 0.933, siou 0.813). It is NOT solved: volume is +14% because the
+revolved outer profile's cone breakpoints are still wrong (the GT keeps a wide ~r268
+radius up through z~124 and tapers gradually with r~100 persisting to z~400; the current
+profile collapses to the thin spindle too early). The fix is a profile correction from
+the GT radius-vs-z diagnostic (`runs/_ctc05_gtprofile.py`); next iteration target.
 
 **Reward honesty (commit ce73b7d):** two audited-then-fixed reward bugs. (1) topology
 schema-mismatch — a mesh-proxy candidate vs a B-rep GT shared only `euler` (different
