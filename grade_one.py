@@ -19,6 +19,7 @@ the agent's view — it just scores against it.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -58,6 +59,34 @@ def main():
 
     report = build_report(run, rw, renders)
     (ws / "feedback.md").write_text(report["markdown"])
+
+    # Persist the candidate per-task so the leaderboard is reproducible from disk.
+    # Gated on IMPROVEMENT (tracked in tasks/<task>/.best_score) so best_candidate.py
+    # always holds the genuine best — a bbox-placeholder probe won't overwrite a solved
+    # reconstruction. Lives under tasks/ (committable alongside the spec); mirrors
+    # run_inner_loop.py's runs/<task>/best/ convention for the manual grade path.
+    if run.ok:
+        task_dir = REPO / "tasks" / args.task
+        task_best = task_dir / "best_candidate.py"
+        score_file = task_dir / ".best_score"
+        src = Path(args.candidate).resolve()
+        prev = None
+        try:
+            prev = float(score_file.read_text().strip()) if score_file.exists() else None
+        except Exception:
+            prev = None
+        if src == task_best.resolve():
+            # Grading the canonical best itself — (re)seed the score baseline so a
+            # later worse attempt can't clobber it.
+            if prev is None or rw.composite > prev:
+                score_file.write_text(f"{rw.composite:.4f}")
+            print(f"[best_candidate already at {task_best} ({rw.composite:.3f})]")
+        elif prev is None or rw.composite >= prev:
+            shutil.copy2(src, task_best)
+            score_file.write_text(f"{rw.composite:.4f}")
+            print(f"[best_candidate persisted ({rw.composite:.3f}) -> {task_best}]")
+        else:
+            print(f"[kept existing best {prev:.3f} (this attempt {rw.composite:.3f})]")
 
     print(report["markdown"])
     print(f"\n[renders + feedback.md written to {ws}]")

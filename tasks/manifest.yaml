@@ -32,6 +32,13 @@ tasks:
     default_track: spec
     notes: Element-probe — tests whether pose-invariant IoU (PCA frame) handles 2 disjoint solids. See make_ground_truth.py.
 
+  - id: rib_probe
+    tier: easy
+    description: 80x40x5 plate + 12 small ribs (small-feature gradient probe).
+    spec: spec.md
+    default_track: spec
+    notes: Throwaway probe for the small-feature-precision fix (iou_res). 1mm rib shift should now score well below perfect.
+
   - id: motor_mount
     tier: easy
     description: 100x70x10 plate, central Ø40 hub (h25) with Ø16 axial bore, 4 mounting holes, chamfered hub.
@@ -62,6 +69,52 @@ tasks:
       Hard, vision-bound: the agent reads drawing.png (GD&T) and derives all geometry.
       No faithful spec.md is provided on purpose — authoring one from a 144-face STEP
       would be reverse-engineering the answer. Use --track drawing.
+
+  - id: nist_ftc_07
+    tier: hard
+    description: NIST PMI FTC-07 — AP242-e2 annotated part, 306 faces, 3 shells, bbox ~352 x 136 x 263 mm.
+    spec: spec.md
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_ftc_07_asme1_ap242-e2.stp via make_ground_truth.py.
+      Notable: 3 shells within 1 solid (euler=0) — adversarial topology probe.
+      Hard drawing-track benchmark; not reconstructable to >=0.95 on spec track alone.
+
+  - id: nist_ftc_09
+    tier: hard
+    description: NIST PMI FTC-09 — AP242-e1 annotated part, 163 faces, 6 shells, bbox ~227 x 5.3 x 279 mm (sheet-like).
+    spec: spec.md
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_ftc_09_asme1_ap242-e1.stp via make_ground_truth.py.
+      Notable: Y-axis is 5.3 mm (extreme sheet), 6 shells, euler=328.
+      The STEP file is 5.9 MB — largest FTC; likely a perforated thin plate.
+      Not reconstructable to >=0.95 on spec track.
+
+  - id: nist_ctc_03
+    tier: medium
+    description: NIST PMI CTC-03 — AP242-e2 annotated part, 120 faces, bbox ~320 x 534 x 163 mm.
+    spec: spec.md
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_ctc_03_asme1_ap242-e2.stp via make_ground_truth.py.
+      Notable: euler=95 (many through-holes / pockets), elongated footprint, 1 shell.
+      Medium complexity; spec track may reach >=0.80 if pockets are correctly inferred.
+
+  - id: nist_ctc_05
+    tier: hard
+    description: NIST PMI CTC-05 — AP242-e1 annotated part, 156 faces, bbox ~527 x 559 x 483 mm (large).
+    spec: spec.md
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_ctc_05_asme1_ap242-e1.stp via make_ground_truth.py.
+      Notable: very large bbox (~527x559x483 mm) but moderate face count (156).
+      Low volume fill ratio (~12646 cm^3 / ~142,400 cm^3 bbox = ~8.9%).
+      Hard drawing-track benchmark.
 
   # --- templates to copy for real benchmark parts -------------------------
   # - id: model_mania_2025

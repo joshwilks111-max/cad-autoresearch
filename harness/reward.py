@@ -50,7 +50,17 @@ class RewardConfig:
     # sampling — IoU needs FAR more points than chamfer to stay self-consistent
     n_points: int = 8000        # chamfer surface samples
     iou_points: int = 60000     # IoU interior samples (dense vs iou_res grid)
-    iou_res: int = 24           # IoU voxel grid resolution
+    iou_res: int = 64           # IoU voxel grid resolution. Raised from 24 so the
+                                # comparison-grid pitch (max_extent/iou_res) is fine
+                                # enough to register small-feature placement errors:
+                                # for an 80mm part, 1.25mm/voxel, so a 1mm feature
+                                # shift moves ~0.8 voxels and the IoU drops (measured
+                                # rib-shift 0.992 -> 0.910). At 24 the pitch was 3.3mm
+                                # and a 1mm shift was sub-voxel (invisible). Self-IoU
+                                # stays 1.0; cost ~11-18x the IoU layer (score() still
+                                # <15s on a 305mm part). TODO: adaptive pitch (res =
+                                # clamp(max_extent/1.25, 24, cap)) for large parts +
+                                # the surface-area-fraction case (FTC-09) is separate.
     seed: int = 0
 
 
