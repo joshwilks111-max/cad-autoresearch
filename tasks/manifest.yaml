@@ -130,6 +130,27 @@ tasks:
       Low volume fill ratio (~12646 cm^3 / ~142,400 cm^3 bbox = ~8.9%).
       Hard drawing-track benchmark.
 
+  - id: pulley_vgroove
+    tier: easy
+    description: Ø80x20 V-belt pulley + 40deg vee groove (12mm deep, root Ø56) + Ø40 hub (w32) + Ø20 bore + bore chamfers.
+    spec: spec.md
+    default_track: spec
+    notes: Fully rotationally-symmetric round part — validates the cylindrical round-part IoU on a NEW grooved (vee-notch) profile distinct from stepped_hub. Reachable to >=0.95.
+
+  - id: flanged_bushing
+    tier: easy
+    description: Ø30x40 flanged sleeve bushing + Ø56x6 base flange + Ø18 through bore + Ø24x8 top counterbore + rim/bore chamfers.
+    spec: spec.md
+    default_track: spec
+    notes: Fully rotationally-symmetric round part with a counterbore — stress-tests the cylindrical IoU on a STEPPED INNER DIAMETER (Ø18 bore stepping to Ø24 at Z=32), distinct from stepped_hub (outer step) and pulley_vgroove (vee groove). Reachable to >=0.95.
+
+  - id: slotted_ring
+    tier: easy
+    description: Castle-nut collar Ø50 outer / Ø28 bore / h18 + 6 axial top-face slots (5w x 8deep, 60deg polar) + 1mm rim chamfer.
+    spec: spec.md
+    default_track: spec
+    notes: Rotational-symmetry-gate probe. _is_rotationally_symmetric returns TRUE despite the 6 slots (too small a volume fraction to perturb the covariance eigenvalues past tol), so iou() takes the cylindrical path. Tests whether the cylindrical (angle-collapsed) IoU can still discriminate slot count/width; baseline bounding-cyl composite=0.415.
+
   # --- templates to copy for real benchmark parts -------------------------
   # - id: model_mania_2025
   #   tier: medium
