@@ -44,7 +44,14 @@ tasks:
     description: 60x40x4 plate with 15 through-holes (surface-area-gap probe).
     spec: spec.md
     default_track: spec
-    notes: Probe � tests whether the COMPOSITE discriminates missing holes (surface-area blind spot check).
+    notes: Probe � tests whether the COMPOSITE discriminates missing holes (surface-area blind spot check).
+
+  - id: stepped_hub
+    tier: easy
+    description: Ø60x8 flange + Ø36x18 hub + Ø16 axial bore + chamfer (clean round part).
+    spec: spec.md
+    default_track: spec
+    notes: Fully rotationally-symmetric — validates the cylindrical round-part IoU end-to-end to >=0.95 (round analog of motor_mount).
 
   - id: motor_mount
     tier: easy
