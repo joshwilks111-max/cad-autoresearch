@@ -151,6 +151,15 @@ tasks:
     default_track: spec
     notes: Rotational-symmetry-gate probe. _is_rotationally_symmetric returns TRUE despite the 6 slots (too small a volume fraction to perturb the covariance eigenvalues past tol), so iou() takes the cylindrical path. Tests whether the cylindrical (angle-collapsed) IoU can still discriminate slot count/width; baseline bounding-cyl composite=0.415.
 
+  - id: hex_bolt
+    tier: easy
+    description: Hex-head shoulder bolt — hex head (across-flats 24mm, h10) + Ø16 round shank (L40) + 1mm shank-tip chamfer + 0.8mm/30deg head-edge chamfer. Single solid, bbox 27.7 x 24 x 50 mm, vol ~12988 mm^3.
+    spec: spec.md
+    default_track: spec
+    notes: >
+      MIXED prismatic hex-head + round-shank part (coaxial about Z). Intended as the voxel-IoU contrast to the pure-round parts, BUT _is_rotationally_symmetric returns TRUE on the hex head: a regular hexagon has 6-fold in-plane symmetry so its two in-plane covariance eigenvalues are near-equal (33.93 vs 33.81, ratio 0.0035 << tol 0.05) and the gate sees a shaft, so iou() actually takes the CYLINDRICAL (angle-collapsed) path, not the voxel path.
+      Useful datapoint: a hex prism is prismatic to a human but rotationally-symmetric to the eigenvalue gate. Baseline full-part bounding-box composite=0.344.
+
   # --- templates to copy for real benchmark parts -------------------------
   # - id: model_mania_2025
   #   tier: medium
