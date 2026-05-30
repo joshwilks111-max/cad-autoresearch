@@ -24,7 +24,19 @@ def hints(rw: RewardResult) -> list[str]:
 
     vc, vg = raw.get("volume_candidate"), raw.get("volume_gt")
     if rw.volume < 0.9 and vc and vg:
-        if vc > vg * 1.10:
+        if vc < vg * 0.10:
+            # Candidate is a tiny fragment of GT — a valid solid built, but it
+            # collapsed. Almost always a failed OpenCASCADE boolean (e.g. a
+            # sphere/cone fused tangent, or sequential cuts that ate the part),
+            # NOT a normal "missing feature". Name it so the fix is obvious.
+            h.append(f"SOLID COLLAPSED: candidate volume is only {vc/vg*100:.1f}% of "
+                     "ground truth — the part built but is a fragment. This is almost "
+                     "always a FAILED BOOLEAN (OpenCASCADE returned a degenerate result "
+                     "without erroring), not a missing feature. Build independent "
+                     "sub-bodies and fuse once at the end; overlap ADD features into "
+                     "their host (never tangent); batch SUBTRACT cuts into one compound; "
+                     "use revolve for cones/spheres instead of primitive booleans.")
+        elif vc > vg * 1.10:
             h.append(f"Volume is {((vc/vg)-1)*100:.0f}% OVER ground truth. Likely an "
                      "extra body, a pocket modelled as a boss, or a hole you didn't "
                      "cut. Check feature POLARITY (cut vs add).")

@@ -46,6 +46,32 @@ _SANDBOX_EPILOGUE = textwrap.dedent(
             except Exception:
                 pass
 
+        # --- validity gate: catch DEGENERATE / EMPTY solids loudly ----------
+        # OpenCASCADE can silently return an empty or fragment solid from a
+        # failed boolean (no Python exception; IsDone() still True). Without
+        # this gate the harness would export a degenerate STL and score it
+        # body=1 off the fragment, a misleading reward. Fail here instead so
+        # the candidate is graded body=0 with a clear, actionable error.
+        # Uses the SAME volume the harness records below (build123d .volume),
+        # which correctly sums a Compound's child solids -- raw
+        # BRepGProp.VolumeProperties_s(..., onlyClosed=True) returns 0 on a
+        # TopoDS_Compound, which complex fused parts are, so it must NOT be used
+        # here (it would falsely reject every valid multi-body part). The
+        # fragment-vs-expected check lives in the grader, which knows GT volume.
+        try:
+            _vol = abs(float(solid.volume))
+        except Exception:
+            _vol = None
+        if _vol is not None and _vol <= 1e-6:
+            raise RuntimeError(
+                "degenerate solid (volume=%.6g mm^3): almost certainly a failed "
+                "OpenCASCADE boolean (it returned an empty result without "
+                "erroring). Common causes: a sphere/cone fused tangent to (not "
+                "overlapping) another body, or several sequential SUBTRACT cuts "
+                "that collapsed the part. Build independent sub-bodies and fuse "
+                "once, overlap ADD features into their host, and batch cuts into "
+                "a single compound." % _vol)
+
         out = _os.environ["AR_WORKSPACE"]
         step_path = _os.path.join(out, "result.step")
         stl_path = _os.path.join(out, "result.stl")
@@ -126,7 +152,11 @@ def run_candidate(code: str, workspace: str | Path, timeout: int = 120,
     ws = Path(workspace)
     ws.mkdir(parents=True, exist_ok=True)
     script = ws / "candidate.py"
-    script.write_text(code + "\n" + _SANDBOX_EPILOGUE)
+    # UTF-8 explicitly: on Windows write_text defaults to cp1252, so any non-ASCII
+    # character in the candidate or epilogue (an em-dash, a degree/diameter symbol
+    # in a comment, etc.) would be written as a byte Python then refuses to execute
+    # as UTF-8 source -> a cryptic SyntaxError graded as a build failure.
+    script.write_text(code + "\n" + _SANDBOX_EPILOGUE, encoding="utf-8")
 
     full_env = {**os.environ, "AR_WORKSPACE": str(ws), "PYTHONUNBUFFERED": "1"}
 
