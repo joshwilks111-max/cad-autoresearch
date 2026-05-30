@@ -1,0 +1,47 @@
+# Task registry for the CAD autoresearch harness.
+#
+# Each task points at a spec (spec track) and optionally a drawing image
+# (drawing track) plus a ground_truth/ folder built by its make_ground_truth.py.
+# `default_track` chooses which input the worker uses unless overridden by
+# --track on the command line.
+#
+# tier:  easy | medium | hard   (matches the literature's difficulty banding)
+# Keep ground truth out of the agent's reach — the harness loads it, the agent
+# never sees it.
+
+tasks:
+  - id: sample_bracket
+    tier: easy
+    description: 80x50x8 plate, four M5 holes, central through-slot.
+    spec: spec.md
+    drawing: drawing.png          # optional; add it to enable --track drawing
+    default_track: spec
+    notes: Built-in smoke test. Mock proposer converges to ~1.0 on the spec track.
+
+  - id: nist_stc_06
+    tier: hard
+    description: NIST PMI STC-06 — toleranced prismatic part, ~144 faces, bbox ~247.65 x 304.80 x 127.89 mm.
+    spec: spec.md                 # stub only; this is a drawing-track part (no hand-authored spec)
+    drawing: drawing.png          # STC_06.pdf rasterised — the real input for this task
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_stc_06_asme1_ap242-e3.stp via make_ground_truth.py.
+      Hard, vision-bound: the agent reads drawing.png (GD&T) and derives all geometry.
+      No faithful spec.md is provided on purpose — authoring one from a 144-face STEP
+      would be reverse-engineering the answer. Use --track drawing.
+
+  # --- templates to copy for real benchmark parts -------------------------
+  # - id: model_mania_2025
+  #   tier: medium
+  #   description: SolidWorks Model Mania 2025 challenge part.
+  #   spec: spec.md
+  #   drawing: drawing.png
+  #   default_track: drawing
+  #
+  # - id: nist_pmi_ftc_09
+  #   tier: hard
+  #   description: NIST PMI FTC test case 9 (sheet-metal-style bracket).
+  #   spec: spec.md
+  #   drawing: drawing.png
+  #   default_track: drawing

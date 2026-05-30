@@ -1,0 +1,32 @@
+# config.yaml — defaults for the autoresearch grid.
+# Every value here can be overridden on the orchestrator/worker command line.
+
+session: cadar              # tmux session name / run-dir label
+
+grid:
+  backend: tmux             # tmux | subprocess   (subprocess works anywhere, incl. Windows)
+  workers: 4                # parallel workers PER TASK (each gets an isolated workspace)
+  tasks:                    # which tasks from tasks/manifest.yaml to attack
+    - sample_bracket
+
+worker:
+  proposer: claude          # claude | mock
+  model: opus               # planning/hard tasks: opus; grinding: sonnet (see CLAUDE.md)
+  budget: 30                # max attempts (turns) per worker
+  target: 0.95              # stop a worker when composite >= target
+  build_timeout: 120        # seconds per candidate build before it's failed
+  track: null               # null = use task default; or force "spec" / "drawing"
+  min_delta: 0.0            # keep/discard: required improvement to accept
+
+watcher:
+  poll_seconds: 20          # how often to print the leaderboard / check liveness
+  wall_clock_minutes: 480   # global budget; watcher stops the grid after this
+  restart_dead: true        # restart crashed workers (subprocess backend only)
+  meta_agent: false         # EXPERIMENTAL outer loop that may edit program.md (see prompts/meta_agent.md)
+  meta_every_minutes: 30
+
+reward:                     # passed through to harness.RewardConfig
+  iou_points: 60000         # dense interior samples; lower for speed, raises noise
+  iou_res: 24
+  n_points: 8000            # chamfer surface samples
+  # tolerance bands and layer weights live in harness/reward.py:RewardConfig

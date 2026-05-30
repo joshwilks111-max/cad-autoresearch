@@ -1,0 +1,17 @@
+# runtime outputs
+runs/
+worktrees/
+*.log
+
+# generated ground truth meshes are fine to keep, but caches are not
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# large candidate artifacts under runs are covered by runs/ above
+
+# raw dataset downloads / staging — not committed (the per-task ground_truth/ that
+# make_ground_truth.py generates IS committable for unrestricted sources like NIST)
+_staging/
+*.zip

@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""
+grade_one.py — grade ONE candidate against a task's hidden ground truth.
+
+This is the manual / interactive counterpart to the orchestrated loop. In the
+grid, run_inner_loop.py grades candidates out-of-band; when you're driving Claude
+Code interactively on your subscription, the agent grades its own candidate by
+calling this after each attempt. No API key, no orchestrator, no claude -p.
+
+Usage:
+    python grade_one.py --task sample_bracket --candidate candidate.py
+    python grade_one.py --task sample_bracket --candidate candidate.py --track spec
+
+Reads the candidate (which must define a module-level `result` solid), builds it
+in a sandbox, grades it on the six-layer composite, writes renders + feedback.md
+under runs/manual/, and prints the feedback report. Never reads ground truth into
+the agent's view — it just scores against it.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO))
+
+from run_inner_loop import load_task, load_ground_truth        # noqa: E402
+from harness import run_candidate, score, render_compare, build_report, RewardConfig  # noqa: E402
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--task", required=True)
+    ap.add_argument("--candidate", required=True,
+                    help="path to a .py file defining `result`")
+    ap.add_argument("--track", default=None, choices=[None, "spec", "drawing"])
+    ap.add_argument("--build-timeout", type=int, default=120)
+    args = ap.parse_args()
+
+    task = load_task(args.task)
+    gt_mesh, gt_sig = load_ground_truth(task)
+
+    code = Path(args.candidate).read_text()
+    # Grade in a dedicated workspace so we never clobber the source candidate
+    # (run_candidate writes its own candidate.py + export epilogue into the ws).
+    ws = REPO / "runs" / "manual"
+    ws.mkdir(parents=True, exist_ok=True)
+
+    run = run_candidate(code, ws, timeout=args.build_timeout)
+    if run.ok:
+        rw = score(run.mesh, gt_mesh, candidate_sig=run.topology,
+                   gt_sig=gt_sig, cfg=RewardConfig())
+        renders = render_compare(run.mesh, gt_mesh, ws / "renders", tag="cand")
+    else:
+        rw = score(None, gt_mesh, gt_sig=gt_sig, cfg=RewardConfig())
+        renders = []
+
+    report = build_report(run, rw, renders)
+    (ws / "feedback.md").write_text(report["markdown"])
+
+    print(report["markdown"])
+    print(f"\n[renders + feedback.md written to {ws}]")
+    if run.ok and run.step_path:
+        print(f"[candidate STEP: {run.step_path}]")
+
+
+if __name__ == "__main__":
+    main()
