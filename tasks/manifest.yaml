@@ -18,12 +18,37 @@ tasks:
     default_track: spec
     notes: Built-in smoke test. Mock proposer converges to ~1.0 on the spec track.
 
+  - id: thinwall_box
+    tier: easy
+    description: 80x60x30 open-top tray, 2mm walls (thin-wall element probe).
+    spec: spec.md
+    default_track: spec
+    notes: Element-probe — tests whether the IoU voxelization handles thin (sub-voxel) walls. See make_ground_truth.py header.
+
+  - id: twin_bodies
+    tier: easy
+    description: two identical 30x30x20 boxes 80mm apart (multi-body element probe).
+    spec: spec.md
+    default_track: spec
+    notes: Element-probe — tests whether pose-invariant IoU (PCA frame) handles 2 disjoint solids. See make_ground_truth.py.
+
   - id: motor_mount
     tier: easy
     description: 100x70x10 plate, central Ø40 hub (h25) with Ø16 axial bore, 4 mounting holes, chamfered hub.
     spec: spec.md
     default_track: spec
     notes: Synthetic spec-track validation part — a step up from sample_bracket (hub + bore + chamfer + hole pattern, 15 faces). Reachable to >=0.95; used to validate the loop end-to-end.
+
+  - id: nist_ftc_11
+    tier: easy
+    description: NIST PMI FTC-11 — simplest NIST part, 6 faces, flat square plate ~63 x 63 x 3 mm.
+    spec: spec.md                 # stub; drawing-track part
+    default_track: drawing
+    notes: >
+      Real NIST MBE PMI test case (US Government work, unrestricted — committable).
+      Ground truth ingested from nist_ftc_11_asme1_rb.stp (AP203, 7.6 KB) via make_ground_truth.py.
+      Smallest NIST part: 6 faces, 1 solid, euler=2. Reconstructable to >=0.95 on spec track
+      (it is essentially Box(63,63,3)). Used as the first real-part pipeline probe.
 
   - id: nist_stc_06
     tier: hard
