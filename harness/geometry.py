@@ -221,7 +221,7 @@ def _is_rotationally_symmetric(pts: np.ndarray, tol: float = 0.05) -> bool:
         return False
 
 
-def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 48) -> float:
+def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     """Rotation-INVARIANT volumetric IoU about each cloud's symmetry axis.
 
     For a rotationally-symmetric part the in-plane orientation is arbitrary, so a
@@ -229,30 +229,52 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 48) -> float:
     symmetry axis (the principal axis whose eigenvalue is most distinct — a disc's
     thin axis, a shaft's long axis), project each interior point to cylindrical
     coordinates (radius from axis, axial position), and IoU the (radius x axial)
-    occupancy histograms — the angular dimension is collapsed, so any in-plane
-    rotation maps to the same histogram. Identical parts -> 1.0; the wrong bore /
-    wrong length / wrong radius is still penalised because it shifts the (r, axial)
-    occupancy."""
-    def hist(p):
+    occupancy grids — the angular dimension is collapsed, so any in-plane rotation
+    maps to the same grid. Identical parts -> 1.0; the wrong bore / wrong length /
+    wrong radius is still penalised because it shifts the (r, axial) occupancy.
+
+    Two subtleties make a self-comparison score EXACTLY 1.0 (and near-identical
+    parts ~0.98 rather than a spurious ~0.62):
+
+    1. SHARED (r, axial) frame. The radial and axial bin edges are derived from
+       BOTH clouds together (rmax, zlo, zspan over the union), not per-cloud. A
+       per-cloud frame put two washers that sampled slightly different r.max()
+       onto different grids, so even matching geometry misaligned by a bin.
+    2. AXIAL-SIGN search. The symmetry axis is an eigenvector, whose SIGN is
+       arbitrary, so one cloud's axial coordinate may run +z while the other runs
+       -z (mirror grids that barely overlap). We try both signs for B and keep the
+       better IoU — a 2-way search, negligible cost."""
+    def project(p):
         p = p - p.mean(0)
-        cov = np.cov(p.T)
-        w, v = np.linalg.eigh(cov)
+        w, v = np.linalg.eigh(np.cov(p.T))
         med = np.median(w)
         axis = int(np.argmax(np.abs(w - med)))   # the distinct (symmetry) axis
         n = v[:, axis]
-        z = p @ n                                 # axial coordinate
+        z = p @ n                                 # axial coordinate (signed)
         r = np.linalg.norm(p - np.outer(z, n), axis=1)
-        rmax = r.max() or 1.0
-        zmin = z.min(); zspan = (z.max() - zmin) or 1.0
+        return r, z
+
+    ra, za = project(pa)
+    rb, zb = project(pb)
+    rmax = max(ra.max(), rb.max()) or 1.0         # SHARED radial frame
+
+    def grid(r, z, zlo, zspan):
         ri = np.clip((r / rmax * (nbins - 1)).astype(int), 0, nbins - 1)
-        zi = np.clip(((z - zmin) / zspan * (nbins - 1)).astype(int), 0, nbins - 1)
+        zi = np.clip(((z - zlo) / zspan * (nbins - 1)).astype(int), 0, nbins - 1)
         g = np.zeros((nbins, nbins), dtype=bool)
         g[ri, zi] = True
         return g
-    ga, gb = hist(pa), hist(pb)
-    inter = np.logical_and(ga, gb).sum()
-    union = np.logical_or(ga, gb).sum()
-    return float(inter / union) if union else 0.0
+
+    best = 0.0
+    for zbs in (zb, -zb):                          # axial-sign search
+        zlo = min(za.min(), zbs.min())             # SHARED axial frame (per sign)
+        zspan = (max(za.max(), zbs.max()) - zlo) or 1.0
+        ga = grid(ra, za, zlo, zspan)
+        gb = grid(rb, zbs, zlo, zspan)
+        inter = np.logical_and(ga, gb).sum()
+        union = np.logical_or(ga, gb).sum()
+        best = max(best, float(inter / union) if union else 0.0)
+    return best
 
 
 def _voxel_iou(pa: np.ndarray, pb: np.ndarray, res: int = 24) -> float:

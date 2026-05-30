@@ -1,29 +1,43 @@
 # Grid Run Leaderboard — first run of the completed harness (2026-05-30)
 
-First real grid run across all tasks. On-subscription (mock proposer + grading only;
-no API/claude proposer, no orchestrator/watcher). 6/12 tasks solved >= 0.95
-(mean composite of solved = 0.9967). Reproducible from each task's
-`tasks/<id>/best_candidate.py`.
+First real grid run across all tasks, then the round-part IoU fix (2026-05-30).
+On-subscription (mock proposer + grading only; no API/claude proposer, no
+orchestrator/watcher). 8/13 tasks solved >= 0.95 (mean composite of solved =
+0.9924). Reproducible from each task's `tasks/<id>/best_candidate.py`.
 
 | Rank | Task | Tier | Track | Composite | GT faces | iou_res | grade s |
 |---|---|---|---|---|---|---|---|
 | 1 | rib_probe | easy | spec | 0.999 | 66 | 64 | 8.3 |
 | 2 | perf_plate | easy | spec | 0.998 | 21 | 48 | 19.6 |
 | 3 | sample_bracket | easy | spec | 0.997 | 15 | 64 | 36.8 |
-| 4 | twin_bodies | easy | spec | 0.997 | 12 | 64 | 5.3 |
-| 5 | motor_mount | easy | spec | 0.996 | 15 | 64 | 38.2 |
-| 6 | thinwall_box | easy | spec | 0.993 | 11 | 64 | 10.0 |
-| 7 | nist_ftc_11* | easy | drawing | 0.524 | 6 | 51 | 22.6 |
-| 8 | nist_ftc_09* | hard | drawing | 0.284 | 163 | 64 | 26.8 |
-| 9 | nist_ftc_07* | hard | drawing | 0.244 | 306 | 64 | 153.0 |
-| 10 | nist_stc_06* | hard | drawing | 0.243 | 144 | 64 | 67.3 |
-| 11 | nist_ctc_05* | hard | drawing | 0.193 | 156 | 64 | 45.3 |
-| 12 | nist_ctc_03* | medium | drawing | 0.167 | 120 | 64 | 32.1 |
+| 4 | stepped_hub | easy | spec | 0.997 | 7 | 64 | 9.0 |
+| 5 | twin_bodies | easy | spec | 0.997 | 12 | 64 | 5.3 |
+| 6 | motor_mount | easy | spec | 0.996 | 15 | 64 | 38.2 |
+| 7 | thinwall_box | easy | spec | 0.993 | 11 | 64 | 10.0 |
+| 8 | nist_ftc_11 | easy | spec | 0.956 | 6 | 51 | 3.9 |
+| 9 | nist_ftc_09* | hard | drawing | 0.284 | 163 | 64 | 26.8 |
+| 10 | nist_ftc_07* | hard | drawing | 0.244 | 306 | 64 | 153.0 |
+| 11 | nist_stc_06* | hard | drawing | 0.243 | 144 | 64 | 67.3 |
+| 12 | nist_ctc_05* | hard | drawing | 0.193 | 156 | 64 | 45.3 |
+| 13 | nist_ctc_03* | medium | drawing | 0.167 | 120 | 64 | 32.1 |
 
 `*` = bbox-baseline only (no committable reconstruction yet; these are hard
 drawing-track parts). STC-06 has a real partial reconstruction at 0.655 (git history,
 commit ec5f0f7) — the 0.243 here is its bbox baseline since its candidate.py was not
 re-derived for this run.
+
+**nist_ftc_11** is now a real SPEC-track reconstruction (a properly-modelled WASHER,
+0.956), up from the 0.524 drawing-track bbox-baseline of the first run. It was the
+part that exposed the round-part IoU bug: a rotationally-symmetric solid has an
+arbitrary in-plane PCA frame the 48-transform voxel search can't align, so identical
+round geometry scored a false-low IoU. Fixed via a rotation-invariant cylindrical
+IoU (radius x axial occupancy about the symmetry axis), then refined with a SHARED
+(r, axial) binning frame + axial-sign search so a near-identical washer scores its
+true ~0.98 (was capped ~0.62 by per-cloud normalization). iou: 0.619 -> 0.986;
+composite 0.868 -> 0.956. The residual gap is topology only (6v/10e vs 8v/12e — a
+revolve seam-edge convention difference, not a geometry error). **stepped_hub** is
+the clean round analog (Ø60 flange + Ø36 hub + Ø16 bore + chamfer) that validates the
+cylindrical path end-to-end at 0.997.
 
 ## Mock inner loop (sample_bracket, --proposer mock --budget 8)
 Demonstrates the autoresearch loop ITERATING (propose -> grade -> keep/discard):
@@ -35,8 +49,13 @@ attempt 004  composite=0.997   TARGET HIT
 ```
 
 ## Notes
-- Solved spec-track parts cluster 0.993-0.999, gated only by the chamfer sampling
-  floor (every other layer = 1.000). The reward is well-calibrated.
+- The 7 synthetic solved parts cluster 0.993-0.999, gated only by the chamfer
+  sampling floor (every other layer = 1.000). The reward is well-calibrated.
+- nist_ftc_11 (0.956) is the first solved REAL part. It sits below the synthetic
+  cluster because its only imperfect layer is topology (a B-rep seam-edge convention
+  difference vs the NIST STEP), not chamfer — its geometry layers (vol/bbox/iou/
+  chamfer/siou) are all >= 0.986. That is the reward behaving honestly: correct solid,
+  slightly different edge graph.
 - Hard real parts score 0.167-0.524 for a featureless box — correctly far-from-done.
   The ordering tracks "how box-like is the part" (ftc_11 near-box highest, ctc_03
   deep-pocketed lowest).
