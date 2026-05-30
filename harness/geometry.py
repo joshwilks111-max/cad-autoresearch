@@ -204,6 +204,57 @@ def _canonical_frame(pts: np.ndarray) -> np.ndarray:
     return pts @ vecs
 
 
+def _is_rotationally_symmetric(pts: np.ndarray, tol: float = 0.05) -> bool:
+    """True if the point cloud's covariance has two near-equal eigenvalues — the
+    signature of a ROTATIONALLY-SYMMETRIC part (washer/disc/shaft/flange). Such a
+    part has an arbitrary PCA in-plane orientation that the discrete 48-transform
+    IoU search can't align, so it must be compared rotation-invariantly (see
+    _cylindrical_iou). A prismatic part has three distinct eigenvalues -> False ->
+    keeps the standard voxel IoU."""
+    try:
+        w = np.sort(np.linalg.eigvalsh(np.cov((pts - pts.mean(0)).T)))[::-1]
+        if w[1] <= 1e-9:
+            return False
+        # two largest within tol of each other (a disc), OR two smallest (a shaft)
+        return ((w[0] - w[1]) / w[1] < tol) or (w[1] > 1e-9 and (w[1] - w[2]) / w[1] < tol)
+    except Exception:
+        return False
+
+
+def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 48) -> float:
+    """Rotation-INVARIANT volumetric IoU about each cloud's symmetry axis.
+
+    For a rotationally-symmetric part the in-plane orientation is arbitrary, so a
+    Cartesian voxel grid mismatches even identical geometry. Instead, detect the
+    symmetry axis (the principal axis whose eigenvalue is most distinct — a disc's
+    thin axis, a shaft's long axis), project each interior point to cylindrical
+    coordinates (radius from axis, axial position), and IoU the (radius x axial)
+    occupancy histograms — the angular dimension is collapsed, so any in-plane
+    rotation maps to the same histogram. Identical parts -> 1.0; the wrong bore /
+    wrong length / wrong radius is still penalised because it shifts the (r, axial)
+    occupancy."""
+    def hist(p):
+        p = p - p.mean(0)
+        cov = np.cov(p.T)
+        w, v = np.linalg.eigh(cov)
+        med = np.median(w)
+        axis = int(np.argmax(np.abs(w - med)))   # the distinct (symmetry) axis
+        n = v[:, axis]
+        z = p @ n                                 # axial coordinate
+        r = np.linalg.norm(p - np.outer(z, n), axis=1)
+        rmax = r.max() or 1.0
+        zmin = z.min(); zspan = (z.max() - zmin) or 1.0
+        ri = np.clip((r / rmax * (nbins - 1)).astype(int), 0, nbins - 1)
+        zi = np.clip(((z - zmin) / zspan * (nbins - 1)).astype(int), 0, nbins - 1)
+        g = np.zeros((nbins, nbins), dtype=bool)
+        g[ri, zi] = True
+        return g
+    ga, gb = hist(pa), hist(pb)
+    inter = np.logical_and(ga, gb).sum()
+    union = np.logical_or(ga, gb).sum()
+    return float(inter / union) if union else 0.0
+
+
 def _voxel_iou(pa: np.ndarray, pb: np.ndarray, res: int = 24) -> float:
     """Voxelise two point clouds on a shared grid; return occupancy IoU."""
     allpts = np.vstack([pa, pb])
@@ -310,6 +361,13 @@ def iou(a: trimesh.Trimesh, b: trimesh.Trimesh,
         pb = sample_volume(b, n, seed + 7)
         if len(pa) == 0 or len(pb) == 0:
             return 0.0
+    # Rotationally-symmetric parts (round) get an arbitrary PCA in-plane frame the
+    # discrete 48-transform voxel search can't align — use a rotation-invariant
+    # cylindrical comparison instead. Prismatic parts (distinct eigenvalues) keep
+    # the standard voxel IoU, so they are unaffected.
+    if _is_rotationally_symmetric(pa) and _is_rotationally_symmetric(pb):
+        return _cylindrical_iou(pa, pb)
+
     ca = _canonical_frame(pa)
     cb = _canonical_frame(pb)
     best = 0.0
