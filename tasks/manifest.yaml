@@ -18,6 +18,13 @@ tasks:
     default_track: spec
     notes: Built-in smoke test. Mock proposer converges to ~1.0 on the spec track.
 
+  - id: motor_mount
+    tier: easy
+    description: 100x70x10 plate, central Ø40 hub (h25) with Ø16 axial bore, 4 mounting holes, chamfered hub.
+    spec: spec.md
+    default_track: spec
+    notes: Synthetic spec-track validation part — a step up from sample_bracket (hub + bore + chamfer + hole pattern, 15 faces). Reachable to >=0.95; used to validate the loop end-to-end.
+
   - id: nist_stc_06
     tier: hard
     description: NIST PMI STC-06 — toleranced prismatic part, ~144 faces, bbox ~247.65 x 304.80 x 127.89 mm.
