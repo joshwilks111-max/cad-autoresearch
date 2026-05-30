@@ -1,30 +1,50 @@
 # Grid Run Leaderboard — first run of the completed harness (2026-05-30)
 
-First real grid run across all tasks, then the round-part IoU fix (2026-05-30).
-On-subscription (mock proposer + grading only; no API/claude proposer, no
-orchestrator/watcher). 8/13 tasks solved >= 0.95 (mean composite of solved =
-0.9924). Reproducible from each task's `tasks/<id>/best_candidate.py`.
+First real grid run across all tasks, then the round-part IoU fix + two reward-honesty
+fixes (2026-05-30). On-subscription (mock proposer + grading only; no API/claude
+proposer, no orchestrator/watcher). 8/16 tasks solved >= 0.95 (mean composite of solved
+= 0.9924). Reproducible from each task's `tasks/<id>/best_candidate.py`.
 
-| Rank | Task | Tier | Track | Composite | GT faces | iou_res | grade s |
-|---|---|---|---|---|---|---|---|
-| 1 | rib_probe | easy | spec | 0.999 | 66 | 64 | 8.3 |
-| 2 | perf_plate | easy | spec | 0.998 | 21 | 48 | 19.6 |
-| 3 | sample_bracket | easy | spec | 0.997 | 15 | 64 | 36.8 |
-| 4 | stepped_hub | easy | spec | 0.997 | 7 | 64 | 9.0 |
-| 5 | twin_bodies | easy | spec | 0.997 | 12 | 64 | 5.3 |
-| 6 | motor_mount | easy | spec | 0.996 | 15 | 64 | 38.2 |
-| 7 | thinwall_box | easy | spec | 0.993 | 11 | 64 | 10.0 |
-| 8 | nist_ftc_11 | easy | spec | 0.956 | 6 | 51 | 3.9 |
-| 9 | nist_ftc_09* | hard | drawing | 0.284 | 163 | 64 | 26.8 |
-| 10 | nist_ftc_07* | hard | drawing | 0.244 | 306 | 64 | 153.0 |
-| 11 | nist_stc_06* | hard | drawing | 0.243 | 144 | 64 | 67.3 |
-| 12 | nist_ctc_05* | hard | drawing | 0.193 | 156 | 64 | 45.3 |
-| 13 | nist_ctc_03* | medium | drawing | 0.167 | 120 | 64 | 32.1 |
+| Rank | Task | Tier | Track | Composite | GT faces | Status |
+|---|---|---|---|---|---|---|
+| 1 | rib_probe | easy | spec | 0.999 | 66 | solved |
+| 2 | perf_plate | easy | spec | 0.998 | 21 | solved |
+| 3 | sample_bracket | easy | spec | 0.997 | 15 | solved |
+| 4 | stepped_hub | easy | spec | 0.997 | 7 | solved (round) |
+| 5 | twin_bodies | easy | spec | 0.997 | 12 | solved |
+| 6 | motor_mount | easy | spec | 0.996 | 15 | solved |
+| 7 | thinwall_box | easy | spec | 0.993 | 11 | solved |
+| 8 | nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, round washer) |
+| 9 | nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) |
+| 10 | nist_stc_06 | hard | drawing | 0.666 | 144 | real partial (drawing track) |
+| - | pulley_vgroove | easy | spec | 0.560b | 13 | scaffolded (round, baseline) |
+| - | slotted_ring | easy | spec | 0.415b | 33 | scaffolded (round, baseline) |
+| - | flanged_bushing | easy | spec | 0.316b | 10 | scaffolded (round, baseline) |
+| - | nist_ftc_07 | hard | drawing | ~0.24b | 306 | bbox baseline (3 shells, multibody) |
+| - | nist_ctc_05 | hard | drawing | ~0.19b | 156 | bbox baseline (next real target) |
+| - | nist_ctc_03 | medium | drawing | ~0.17b | 120 | bbox baseline (thin-wall lattice) |
 
-`*` = bbox-baseline only (no committable reconstruction yet; these are hard
-drawing-track parts). STC-06 has a real partial reconstruction at 0.655 (git history,
-commit ec5f0f7) — the 0.243 here is its bbox baseline since its candidate.py was not
-re-derived for this run.
+`b` = baseline only (featureless box/cylinder; no real reconstruction yet). The 3
+`*_vgroove/_ring/_bushing` round parts are scaffolded + confirmed on the cylindrical-IoU
+path, all reachable to >=0.95 — they are queued quick wins. The 3 remaining `nist_*`
+hard parts are bbox baselines; per the difficulty survey the next real-part target is
+**nist_ctc_05** (single solid, one dominant central bore, euler=27 — genuinely
+spec-track-reachable), NOT ftc_07 (3-shell multibody, OCC fragment hazard) or ctc_03
+(1.4% fill thin-wall lattice, euler=95).
+
+**Reward honesty (commit ce73b7d):** two audited-then-fixed reward bugs. (1) topology
+schema-mismatch — a mesh-proxy candidate vs a B-rep GT shared only `euler` (different
+definitions) and scored a PERFECT candidate 0.0; now returns neutral 0.5 on schema
+mismatch. (2) adaptive feature weighting — a controlled probe measured that IoU is the
+only layer sensitive to missing holes (chamfer/SIoU are floor-blind), so for
+feature-rich GTs (high face count) weight shifts from the blind surface layers toward
+IoU+topology. Both verified zero-regression on the solved suite; 10/10 tests pass.
+
+**nist_ftc_09** is a real SPEC-track reconstruction (a perforated plate: 29 holes +
+window + slots, authored from measuring the part), 0.258 -> 0.758. It is topology-capped:
+GT euler=328 / 6 shells (major internal/void structure) is un-matchable from an
+external reconstruction, so 0.758 is its honest ceiling — a strong real-part partial,
+not a defect. **nist_ftc_11** is the solved real round washer (0.956).
 
 **nist_ftc_11** is now a real SPEC-track reconstruction (a properly-modelled WASHER,
 0.956), up from the 0.524 drawing-track bbox-baseline of the first run. It was the
