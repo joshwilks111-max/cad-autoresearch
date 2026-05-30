@@ -1,26 +1,42 @@
 """
-candidate.py — stepped_hub reconstruction (SPEC track). A clean round part:
-coaxial about Z, base bottom on Z=0.
-  - Base flange: cylinder r30 (Ø60), h8 (Z 0..8).
-  - Hub: cylinder r18 (Ø36), h18, on the flange (Z 8..26).
-  - Axial bore: r8 (Ø16), through the full height (Z 0..26).
-  - 2 mm chamfer on the top outer edge of the hub (Ø36 rim at Z=26).
-Module-level `result`. Units: mm.
+candidate.py — NIST FTC-11 reconstruction (SPEC track). A round WASHER, modelled by
+revolving its exact axial cross-section with TRUE R1.5 fillet ARCS (not a faceted
+polyline) so the rims become smooth torus faces matching the GT B-rep.
+
+Cross-section (radius, z), from the GT mesh (WF-H extraction):
+  - outer R31.5, bore R16, thickness 3 (z in [-1.5, 1.5]); sharp BOTTOM.
+  - TOP-side R1.5 fillets on inner & outer rims: arc centres at r=17.5 and r=30.0
+    (z=0), peaking at z=1.5; flat top annular face at z=0.425 (r 18.93..28.55).
+Revolving with real arcs reproduces GT volume (~5126) and topology (smooth fillets).
+Units: mm.
 """
 
-from build123d import (BuildPart, Cylinder, Locations, Align, Axis, GeomType,
-                       Mode, chamfer)
+from build123d import (BuildPart, BuildSketch, BuildLine, Line, ThreePointArc,
+                       make_face, revolve, Plane, Axis)
+
+R_IN, R_OUT, T = 16.0, 31.5, 1.5   # bore r, outer r, half-thickness
+# Exact profile points (radius, z) from WF-H. The TOP rim fillets are R1.5 arcs that
+# bulge UP to a z=1.5 peak — defined via a ThreePointArc through that peak so the
+# convex (major) arc is taken, not the minor one.
+P_bore_bot = (R_IN, -T)
+P_bore_top = (R_IN, 0.0)            # bore wall -> inner fillet (tangent, z=0)
+P_in_peak = (17.5, 1.5)            # inner fillet peak (centre r, z=1.5)
+P_in_flat = (18.93, 0.425)         # inner fillet -> flat top
+P_out_flat = (28.55, 0.425)        # flat top -> outer fillet
+P_out_peak = (30.0, 1.5)          # outer fillet peak
+P_out_top = (R_OUT, 0.0)           # outer fillet -> outer wall (tangent, z=0)
+P_out_bot = (R_OUT, -T)
 
 with BuildPart() as p:
-    Cylinder(radius=30, height=8, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    with Locations((0, 0, 8)):
-        Cylinder(radius=18, height=18, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    with Locations((0, 0, 26)):
-        Cylinder(radius=8, height=26, align=(Align.CENTER, Align.CENTER, Align.MAX),
-                 mode=Mode.SUBTRACT)
-    top_outer = (p.edges().filter_by(GeomType.CIRCLE)
-                 .group_by(Axis.Z)[-1]
-                 .sort_by(lambda e: e.radius)[-1:])
-    chamfer(top_outer, length=2)
+    with BuildSketch(Plane.XZ):
+        with BuildLine():
+            Line(P_bore_bot, P_bore_top)                       # up the bore wall
+            ThreePointArc(P_bore_top, P_in_peak, P_in_flat)    # inner top R1.5 fillet
+            Line(P_in_flat, P_out_flat)                        # flat top annular face
+            ThreePointArc(P_out_flat, P_out_peak, P_out_top)   # outer top R1.5 fillet
+            Line(P_out_top, P_out_bot)                         # down the outer wall
+            Line(P_out_bot, P_bore_bot)                        # flat bottom
+        make_face()
+    revolve(axis=Axis.Z)
 
 result = p
