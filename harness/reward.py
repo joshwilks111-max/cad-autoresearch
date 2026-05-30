@@ -50,17 +50,16 @@ class RewardConfig:
     # sampling — IoU needs FAR more points than chamfer to stay self-consistent
     n_points: int = 8000        # chamfer surface samples
     iou_points: int = 60000     # IoU interior samples (dense vs iou_res grid)
-    iou_res: int = 64           # IoU voxel grid resolution. Raised from 24 so the
-                                # comparison-grid pitch (max_extent/iou_res) is fine
-                                # enough to register small-feature placement errors:
-                                # for an 80mm part, 1.25mm/voxel, so a 1mm feature
-                                # shift moves ~0.8 voxels and the IoU drops (measured
-                                # rib-shift 0.992 -> 0.910). At 24 the pitch was 3.3mm
-                                # and a 1mm shift was sub-voxel (invisible). Self-IoU
-                                # stays 1.0; cost ~11-18x the IoU layer (score() still
-                                # <15s on a 305mm part). TODO: adaptive pitch (res =
-                                # clamp(max_extent/1.25, 24, cap)) for large parts +
-                                # the surface-area-fraction case (FTC-09) is separate.
+    iou_res: int = 64           # IoU voxel-grid resolution CAP. With
+                                # iou_target_pitch_mm set, the actual res is derived
+                                # per-part to hit that pitch, clamped to [24, iou_res]:
+                                # small parts use a lower res (cheaper) and huge parts
+                                # are capped here for cost. (Was a flat 64.)
+    iou_target_pitch_mm: float = 1.25  # adaptive IoU pitch: res = clamp(max_extent /
+                                # this, 24, iou_res). 1.25mm registers a ~1mm feature
+                                # shift (for an 80mm part -> res 64; a 40mm part -> 32;
+                                # a 305mm part -> capped 64). Fixes the small-feature
+                                # gradient gap without flat-64 cost on small parts.
     seed: int = 0
 
 
@@ -151,7 +150,8 @@ def score(candidate_mesh: trimesh.Trimesh,
 
     # ---- Layer 5: IoU (pose invariant) ------------------------------------
     iou_s = G.iou(candidate_mesh, gt_mesh, res=cfg.iou_res,
-                  n=cfg.iou_points, seed=cfg.seed)
+                  n=cfg.iou_points, seed=cfg.seed,
+                  target_pitch_mm=cfg.iou_target_pitch_mm)
     raw["iou"] = iou_s
 
     # ---- Layer 6: Chamfer (scaled by gt diagonal) -------------------------

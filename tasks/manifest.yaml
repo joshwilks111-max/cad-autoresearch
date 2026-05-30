@@ -39,6 +39,13 @@ tasks:
     default_track: spec
     notes: Throwaway probe for the small-feature-precision fix (iou_res). 1mm rib shift should now score well below perfect.
 
+  - id: perf_plate
+    tier: easy
+    description: 60x40x4 plate with 15 through-holes (surface-area-gap probe).
+    spec: spec.md
+    default_track: spec
+    notes: Probe � tests whether the COMPOSITE discriminates missing holes (surface-area blind spot check).
+
   - id: motor_mount
     tier: easy
     description: 100x70x10 plate, central Ø40 hub (h25) with Ø16 axial bore, 4 mounting holes, chamfered hub.

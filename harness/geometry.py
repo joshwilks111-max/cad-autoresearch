@@ -270,7 +270,8 @@ def _voxel_centers(mesh: trimesh.Trimesh, res: int = 48) -> np.ndarray:
 
 
 def iou(a: trimesh.Trimesh, b: trimesh.Trimesh,
-        res: int = 24, n: int = 60000, seed: int = 0) -> float:
+        res: int = 24, n: int = 60000, seed: int = 0,
+        target_pitch_mm: float | None = None) -> float:
     """Rotation/translation-invariant VOLUMETRIC IoU in [0, 1].
 
     Derive DETERMINISTIC interior occupancy (filled-voxel centres) for both
@@ -284,7 +285,22 @@ def iou(a: trimesh.Trimesh, b: trimesh.Trimesh,
     interior sample, which capped self-IoU at ~0.975 and made high-fidelity
     attempts indistinguishable from sampling noise. Falls back to the legacy
     interior-sampling path if voxelisation fails (e.g. a non-watertight
-    candidate), so a broken solid still scores rather than crashing."""
+    candidate), so a broken solid still scores rather than crashing.
+
+    ADAPTIVE RESOLUTION: if ``target_pitch_mm`` is given, the comparison-grid
+    resolution is derived from the GT's longest extent so the voxel pitch is
+    ~target_pitch_mm regardless of part size (a feature error smaller than the
+    pitch is invisible — that was the small-feature gradient gap). It is clamped
+    to [24, res] so tiny parts aren't over-resolved (cheaper) and huge parts are
+    capped for cost (``res`` is the CAP here, e.g. 64). Without target_pitch_mm
+    the fixed ``res`` is used (legacy behaviour)."""
+    if target_pitch_mm and target_pitch_mm > 0:
+        ext = np.asarray(b.extents, dtype=float)
+        ext = ext[np.isfinite(ext)]
+        max_ext = float(np.max(ext)) if ext.size else 0.0
+        if max_ext > 0:
+            want = int(np.ceil(max_ext / target_pitch_mm))
+            res = int(np.clip(want, 24, res))   # res is the cap
     pa = _voxel_centers(a, res=res * 2)
     pb = _voxel_centers(b, res=res * 2)
     if len(pa) == 0 or len(pb) == 0:
