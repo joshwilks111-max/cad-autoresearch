@@ -457,6 +457,25 @@ def topology_signature_from_mesh(mesh: trimesh.Trimesh) -> dict:
             "watertight": bool(mesh.is_watertight)}
 
 
+# Keys that mark a signature's SCHEMA. A B-rep signature
+# (topology_signature_from_solid / a ground-truth topology.json) carries face/edge/
+# vertex/shell/solid counts; the cheap mesh proxy (topology_signature_from_mesh)
+# carries components/watertight. They are different coordinate systems for topology.
+_BREP_SIG_KEYS = {"faces", "edges", "vertices", "shells", "solids"}
+_MESH_SIG_KEYS = {"components", "watertight"}
+
+
+def _sig_schema(sig: dict | None) -> str | None:
+    """Classify a topology signature as 'brep', 'mesh', or 'other'."""
+    if not sig:
+        return None
+    if _BREP_SIG_KEYS & set(sig):
+        return "brep"
+    if _MESH_SIG_KEYS & set(sig):
+        return "mesh"
+    return "other"
+
+
 def topology_match(sig_a: dict | None, sig_b: dict | None) -> float:
     """Weighted fraction of shared keys whose values match exactly. 0.5 (neutral)
     when one side has no signature at all.
@@ -466,8 +485,21 @@ def topology_match(sig_a: dict | None, sig_b: dict | None) -> float:
     through-hole shifts it by 2), so a mismatch there should cost more than one
     of the five raw counts. Degrades gracefully — if ``euler`` is absent (e.g. a
     ground-truth ``topology.json`` written before this change), the weighting
-    falls back to the original equal-weight fraction over the shared keys."""
+    falls back to the original equal-weight fraction over the shared keys.
+
+    CROSS-SCHEMA GUARD: a B-rep signature ({faces, edges, …, euler}) and the cheap
+    mesh proxy ({components, euler, watertight}) share only the ``euler`` key, and
+    the two ``euler`` values are DIFFERENT QUANTITIES — the B-rep V-E+F over B-rep
+    faces/edges/vertices, vs the triangulation V-E+F (genus) of the mesh. Comparing
+    them scores a geometrically-PERFECT candidate 0.0 (the mesh-euler of a correct
+    solid never equals its B-rep euler). That is a missing-signature situation, not
+    a topology error, so when one side is B-rep and the other is the mesh proxy we
+    return NEUTRAL 0.5 rather than a spurious 0.0. Same-schema comparisons
+    (B-rep↔B-rep, the normal in-loop path; mesh↔mesh) are unaffected."""
     if not sig_a or not sig_b:
+        return 0.5
+    sa, sb = _sig_schema(sig_a), _sig_schema(sig_b)
+    if {sa, sb} == {"brep", "mesh"}:
         return 0.5
     keys = set(sig_a) & set(sig_b)
     if not keys:

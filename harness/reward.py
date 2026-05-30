@@ -61,6 +61,20 @@ class RewardConfig:
                                 # a 305mm part -> capped 64). Fixes the small-feature
                                 # gradient gap without flat-64 cost on small parts.
     seed: int = 0
+    # Adaptive weighting for feature-rich parts. WF-M (2026-05-30) measured that on a
+    # part with many small features (holes/pockets), volumetric IoU is the ONLY layer
+    # sensitive to missing material (it drops ~proportionally to the missing volume),
+    # while Chamfer and Surface-IoU are structurally blind (a 7%-volume hole field shifts
+    # them less than the sampling floor). So a hole-less box scored high on the surface
+    # terms. Fix: as the GROUND TRUTH's B-rep face count rises, shift weight OUT of the
+    # blind surface layers (chamfer, siou) INTO the sensitive ones (iou, topology). Keyed
+    # on the GT (not the candidate) -> a proposer cannot game it by adding faces. Disabled
+    # (no shift) when the GT has no B-rep face count or for simple parts.
+    adaptive_feature_weighting: bool = True
+    afw_face_lo: int = 15     # at/below this GT face count: no shift (simple part)
+    afw_face_hi: int = 120    # at/above this GT face count: full shift (complex real part)
+    afw_max_shift: float = 0.10   # total weight moved from {chamfer,siou} to {iou,topology}
+    afw_iou_share: float = 0.70   # fraction of the shift that goes to iou (rest to topology)
 
 
 def _ramp(err: float, soft: float, hard: float) -> float:
@@ -69,6 +83,35 @@ def _ramp(err: float, soft: float, hard: float) -> float:
     if err >= hard:
         return 0.0
     return 1.0 - (err - soft) / (hard - soft)
+
+
+def _adaptive_weights(cfg: "RewardConfig", gt_faces: int | None) -> dict:
+    """Return per-layer weights, shifted toward IoU+topology for feature-rich GTs.
+
+    See ``RewardConfig.adaptive_feature_weighting``. ``richness`` ramps 0->1 over
+    [afw_face_lo, afw_face_hi] GT faces; at full richness ``afw_max_shift`` of weight
+    moves from the blind surface layers (chamfer, siou, split by their current weight)
+    into iou (``afw_iou_share``) and topology (the remainder). Returns the base weights
+    unchanged when disabled, when ``gt_faces`` is None (no B-rep signature), or for
+    simple parts (richness 0)."""
+    base = dict(volume=cfg.w_volume, bbox=cfg.w_bbox, topology=cfg.w_topology,
+                iou=cfg.w_iou, chamfer=cfg.w_chamfer, siou=cfg.w_siou)
+    if not cfg.adaptive_feature_weighting or not gt_faces:
+        return base
+    span = max(cfg.afw_face_hi - cfg.afw_face_lo, 1)
+    richness = min(max((gt_faces - cfg.afw_face_lo) / span, 0.0), 1.0)
+    if richness <= 0.0:
+        return base
+    shift = cfg.afw_max_shift * richness
+    blind_total = base["chamfer"] + base["siou"]
+    if blind_total <= 0:
+        return base
+    w = dict(base)
+    w["chamfer"] = base["chamfer"] - shift * (base["chamfer"] / blind_total)
+    w["siou"] = base["siou"] - shift * (base["siou"] / blind_total)
+    w["iou"] = base["iou"] + shift * cfg.afw_iou_share
+    w["topology"] = base["topology"] + shift * (1.0 - cfg.afw_iou_share)
+    return w
 
 
 @dataclass
@@ -169,11 +212,16 @@ def score(candidate_mesh: trimesh.Trimesh,
     raw["siou"] = siou_s
 
     # ---- Composite ---------------------------------------------------------
-    wsum = (cfg.w_volume + cfg.w_bbox + cfg.w_topology + cfg.w_iou +
-            cfg.w_chamfer + cfg.w_siou)
-    weighted = (cfg.w_volume * vol_s + cfg.w_bbox * bbox_s +
-                cfg.w_topology * topo_s + cfg.w_iou * iou_s +
-                cfg.w_chamfer * cham_s + cfg.w_siou * siou_s) / wsum
+    # Adaptive weighting: for a feature-rich GT (high B-rep face count), shift weight
+    # from the blind surface layers (chamfer, siou) toward the layers that actually
+    # catch missing material (iou, topology). Keyed on the GT face count -> ungameable.
+    gt_faces = sig_g.get("faces") if isinstance(sig_g, dict) else None
+    w = _adaptive_weights(cfg, gt_faces)
+    raw["weights"] = w
+    wsum = sum(w.values())
+    weighted = (w["volume"] * vol_s + w["bbox"] * bbox_s +
+                w["topology"] * topo_s + w["iou"] * iou_s +
+                w["chamfer"] * cham_s + w["siou"] * siou_s) / wsum
     composite = body * weighted
 
     return RewardResult(

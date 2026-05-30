@@ -94,6 +94,42 @@ def test_reward_result_has_siou():
     assert "siou" in r.summary()
 
 
+def test_topology_match_neutral_on_schema_mismatch():
+    """A B-rep signature vs the cheap mesh proxy share only `euler`, and the two
+    eulers are different quantities (B-rep V-E+F vs triangulation genus). Comparing
+    them used to score a geometrically-correct candidate 0.0; the schema guard must
+    instead return NEUTRAL 0.5 — while leaving same-schema comparisons exact."""
+    from harness import geometry as G
+    brep = {"faces": 15, "edges": 36, "vertices": 24, "shells": 1, "solids": 1, "euler": 3}
+    mesh = {"components": 1, "euler": -8, "watertight": True}
+    # cross-schema -> neutral, not a spurious 0.0
+    assert G.topology_match(brep, mesh) == 0.5
+    assert G.topology_match(mesh, brep) == 0.5
+    # same-schema behaviour unchanged
+    assert G.topology_match(brep, brep) == 1.0
+    assert G.topology_match(mesh, mesh) == 1.0
+    brep_wrong = {"faces": 42, "edges": 120, "vertices": 80, "shells": 1, "solids": 1, "euler": 2}
+    assert G.topology_match(brep, brep_wrong) < 1.0   # real penalty preserved
+
+
+def test_adaptive_weighting_keys_on_gt_faces():
+    """Feature-rich GT shifts weight from the blind surface layers (chamfer, siou)
+    into the sensitive ones (iou, topology); a simple GT is unchanged. The shift is
+    keyed on the GT face count, so it is ungameable by the candidate."""
+    from harness.reward import _adaptive_weights, RewardConfig
+    cfg = RewardConfig()
+    base = _adaptive_weights(cfg, None)             # no signature -> base weights
+    simple = _adaptive_weights(cfg, 10)             # below afw_face_lo -> base
+    rich = _adaptive_weights(cfg, 160)              # complex real part -> shifted
+    assert base == simple
+    assert simple["iou"] == cfg.w_iou               # untouched for simple parts
+    assert rich["iou"] > base["iou"]                # sensitive layer up
+    assert rich["chamfer"] < base["chamfer"]        # blind layer down
+    assert rich["siou"] < base["siou"]              # blind layer down
+    # total weight is conserved (we move weight between layers, not add it)
+    assert abs(sum(rich.values()) - sum(base.values())) < 1e-9
+
+
 def test_wrong_size_scores_lower():
     gt_mesh, gt_sig = _gt()
     big = gt_mesh.copy()
