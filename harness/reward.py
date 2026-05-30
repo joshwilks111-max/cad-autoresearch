@@ -44,8 +44,9 @@ class RewardConfig:
     w_volume: float = 0.20
     w_bbox: float = 0.15
     w_topology: float = 0.15
-    w_iou: float = 0.30
+    w_iou: float = 0.25      # reduced from 0.30 to fund w_siou
     w_chamfer: float = 0.20
+    w_siou: float = 0.10     # Surface IoU: catches surface errors volumetric IoU misses
     # sampling — IoU needs FAR more points than chamfer to stay self-consistent
     n_points: int = 8000        # chamfer surface samples
     iou_points: int = 60000     # IoU interior samples (dense vs iou_res grid)
@@ -70,6 +71,7 @@ class RewardResult:
     topology: float
     iou: float
     chamfer: float
+    siou: float = 0.0          # Layer 7: Surface IoU (default keeps old ledger rows loadable)
     raw: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -78,7 +80,8 @@ class RewardResult:
     def summary(self) -> str:
         return (f"composite={self.composite:.3f} "
                 f"[body={self.body:.0f} vol={self.volume:.3f} bbox={self.bbox:.3f} "
-                f"topo={self.topology:.3f} iou={self.iou:.3f} cham={self.chamfer:.3f}]")
+                f"topo={self.topology:.3f} iou={self.iou:.3f} cham={self.chamfer:.3f} "
+                f"siou={self.siou:.3f}]")
 
 
 def score(candidate_mesh: trimesh.Trimesh,
@@ -148,16 +151,25 @@ def score(candidate_mesh: trimesh.Trimesh,
     cham_s = _ramp(cham_frac, cfg.cham_tol_soft, cfg.cham_tol_hard)
     raw["chamfer_abs"], raw["chamfer_frac_of_diag"] = cd, cham_frac
 
+    # ---- Layer 7: Surface IoU (SIoU) --------------------------------------
+    # Complementary to volumetric IoU: catches surface-shape errors (a flat face
+    # where a curved one belongs) that volume-identical solids mask. Uses the
+    # Chamfer point budget (surface samples, not interior).
+    siou_s = G.surface_iou(candidate_mesh, gt_mesh, n=cfg.n_points, seed=cfg.seed)
+    raw["siou"] = siou_s
+
     # ---- Composite ---------------------------------------------------------
-    wsum = (cfg.w_volume + cfg.w_bbox + cfg.w_topology + cfg.w_iou + cfg.w_chamfer)
+    wsum = (cfg.w_volume + cfg.w_bbox + cfg.w_topology + cfg.w_iou +
+            cfg.w_chamfer + cfg.w_siou)
     weighted = (cfg.w_volume * vol_s + cfg.w_bbox * bbox_s +
                 cfg.w_topology * topo_s + cfg.w_iou * iou_s +
-                cfg.w_chamfer * cham_s) / wsum
+                cfg.w_chamfer * cham_s + cfg.w_siou * siou_s) / wsum
     composite = body * weighted
 
     return RewardResult(
         composite=round(composite, 4),
         body=body, volume=round(vol_s, 4), bbox=round(bbox_s, 4),
         topology=round(topo_s, 4), iou=round(iou_s, 4), chamfer=round(cham_s, 4),
+        siou=round(siou_s, 4),
         raw=raw,
     )

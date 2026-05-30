@@ -128,6 +128,69 @@ def chamfer_distance(a: trimesh.Trimesh, b: trimesh.Trimesh,
 
 
 # --------------------------------------------------------------------------- #
+#  Surface IoU (SIoU)
+# --------------------------------------------------------------------------- #
+def surface_iou(a: trimesh.Trimesh, b: trimesh.Trimesh,
+                n: int = 4000, seed: int = 0,
+                threshold_frac: float = 0.01) -> float:
+    """Symmetric Surface IoU in [0, 1] — complementary to the volumetric IoU.
+
+    Samples n points from each surface, then takes the F1 (harmonic mean) of two
+    directed fractions: recall = fraction of candidate points within
+    threshold_frac * gt_bbox_diagonal of the GT surface; precision = fraction of
+    GT points within that distance of the candidate surface. Both directions must
+    agree for a high score, so a phantom extra surface OR a missing surface both
+    score low. Catches surface-shape errors (a flat face where a curved one
+    belongs) that volume-identical solids hide from the volumetric IoU.
+
+    Both clouds are CENTRED first (like chamfer_distance) so this measures shape,
+    not placement — placement is already covered by IoU (PCA-aligned) + Chamfer.
+    Deterministic: same sample_surface seed convention as chamfer_distance."""
+    pa = sample_surface(a, n, seed)
+    pb = sample_surface(b, n, seed + 1)
+    if len(pa) == 0 or len(pb) == 0:
+        return 0.0
+    pa = pa - pa.mean(axis=0)
+    pb = pb - pb.mean(axis=0)
+
+    try:
+        gt_ext = np.asarray(b.bounding_box_oriented.primitive.extents, dtype=float)
+    except Exception:
+        gt_ext = np.asarray(b.extents, dtype=float)
+    gt_ext = gt_ext[np.isfinite(gt_ext)]
+    diag = float(np.linalg.norm(gt_ext)) if gt_ext.size > 0 else 1.0
+    if not np.isfinite(diag) or diag < 1e-9:
+        diag = 1.0
+
+    # Threshold = the real-error tolerance (frac of GT diagonal), but FLOORED to
+    # clear the surface-sampling spacing. Two independent finite samplings of the
+    # SAME surface have a nearest-neighbour distance ~= the sample spacing
+    # (~sqrt(area / n)); if the tolerance is finer than that, even identical
+    # surfaces fail it and self-SIoU collapses (the sampling floor that
+    # deterministic voxelisation removed from the volumetric IoU). Floor at
+    # ~1.5x the estimated spacing so self-SIoU -> ~1.0 while genuine surface
+    # errors (which displace points by many spacings) are still penalised.
+    try:
+        gt_area = float(b.area)
+    except Exception:
+        gt_area = 0.0
+    spacing = np.sqrt(gt_area / max(len(pb), 1)) if gt_area > 0 else 0.0
+    thresh = max(threshold_frac * diag, 1.5 * spacing)
+
+    tree_b = cKDTree(pb)
+    da, _ = tree_b.query(pa)
+    recall = float(np.mean(da <= thresh))      # do we cover the GT surface?
+
+    tree_a = cKDTree(pa)
+    db, _ = tree_a.query(pb)
+    precision = float(np.mean(db <= thresh))   # no phantom surface?
+
+    if recall + precision < 1e-9:
+        return 0.0
+    return float(2.0 * precision * recall / (precision + recall))
+
+
+# --------------------------------------------------------------------------- #
 #  Pose-invariant volumetric IoU
 # --------------------------------------------------------------------------- #
 def _canonical_frame(pts: np.ndarray) -> np.ndarray:

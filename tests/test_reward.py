@@ -59,6 +59,41 @@ def test_iou_identical_is_exactly_one():
     assert G.iou(gt_mesh, gt_mesh) >= 0.999
 
 
+def test_siou_self_is_one():
+    """Layer-7 in isolation: SIoU of a mesh against itself is ~1.0 (both directed
+    fractions are 1.0 at any reasonable threshold)."""
+    gt_mesh, _ = _gt()
+    from harness import geometry as G
+    assert G.surface_iou(gt_mesh, gt_mesh) >= 0.99
+
+
+def test_siou_discriminates_wrong_shape():
+    """SIoU must clearly penalise a wrong-shape candidate (a flat box where the
+    GT is a curved cylinder) — i.e. score well below its self-value of ~1.0.
+
+    (Note: SIoU is NOT necessarily lower than the *volumetric* IoU for this case
+    — the two capture different errors. A box vs a same-footprint cylinder differs
+    MORE in volume (the box's corners protrude) than in surface, so IoU can be the
+    lower of the two here. They are complementary, which is the point of adding
+    SIoU; the property we assert is that SIoU discriminates the wrong shape.)"""
+    import trimesh
+    from harness import geometry as G
+    gt_cyl = trimesh.creation.cylinder(radius=10.0, height=5.0, sections=64)
+    cand_box = trimesh.creation.box(extents=[20.0, 20.0, 5.0])
+    siou_val = G.surface_iou(gt_cyl, cand_box)
+    assert siou_val < 0.85, f"siou {siou_val:.3f} should clearly penalise wrong shape"
+    # And it must be well below a self-comparison (which is ~1.0).
+    assert siou_val < G.surface_iou(gt_cyl, gt_cyl) - 0.1
+
+
+def test_reward_result_has_siou():
+    """The composite wiring exposes the new siou field + includes it in summary."""
+    gt_mesh, gt_sig = _gt()
+    r = score(gt_mesh, gt_mesh, candidate_sig=gt_sig, gt_sig=gt_sig)
+    assert hasattr(r, "siou") and r.siou >= 0.99
+    assert "siou" in r.summary()
+
+
 def test_wrong_size_scores_lower():
     gt_mesh, gt_sig = _gt()
     big = gt_mesh.copy()
