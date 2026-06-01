@@ -71,7 +71,7 @@ def detect_units(
     Tier 2 (magnitude sanity, Tier 1 silent):
         median(|dim_values|) < 12  → ('in',  'magnitude_inference')
         median(|dim_values|) > 15  → ('mm',  'magnitude_inference')
-        6–15                       → ('unknown', 'magnitude_ambiguous')
+        12–15 (inclusive)          → ('unknown', 'magnitude_ambiguous')
 
     Tier 3 (part_category prior, last resort):
         'us'/'aerospace'/'asme'    → ('in', 'category_prior')
@@ -149,13 +149,32 @@ _MM_FIELD = re.compile(
 
 
 def _is_numeric_dim_field(key: str) -> bool:
-    """Return True if *key* looks like a dimension/tolerance field to convert."""
+    """Return True if *key* looks like a LINEAR dimension/tolerance field to convert.
+
+    Two review fixes:
+      - ANGULAR fields (degrees) must NEVER be scaled by 25.4 — exclude any key
+        mentioning angle/deg (e.g. 'angle_tol', 'taper_deg').
+      - The old bare `"tol" in k` substring over-matched non-length categoricals
+        like 'tolerance_class' (a GD&T grade) -> silently x25.4 (caught in review).
+        Restrict to word-boundary tolerance tokens.
+      - 'radius' added so the Lane 4 normaliser matches drawing_extract's inline
+        fallback (which already scaled radius) — they were divergent."""
     k = key.lower()
+    # DENYLIST first — categoricals/counts that share a prefix with real fields.
+    # 'tolerance_class'/'tolerance_grade' START WITH 'tol' but are GD&T grades (e.g.
+    # "IT7"), NOT lengths; 'quantity'/'*_count' are counts. None may be scaled x25.4.
+    # Angular fields are degrees, not mm.
+    if ("angle" in k or "deg" in k
+            or k.endswith("_class") or k.endswith("_grade")
+            or k.endswith("_count") or k == "quantity" or k.endswith("_qty")):
+        return False
+    # AFFIRMATIVE: linear length / tolerance fields.
     if k.endswith("_mm"):
         return True
-    if k in ("nominal", "diameter", "depth", "tolerance"):
+    if k in ("nominal", "diameter", "depth", "radius", "tolerance"):
         return True
-    if "tol" in k:
+    # word-boundary tolerance tokens (the denylist above already removed *_class etc.)
+    if k.endswith("_tol") or "_tol_" in k or k.startswith("tol_"):
         return True
     return False
 
@@ -199,8 +218,14 @@ def normalize_to_mm(extracted: dict) -> dict:
     if extracted.get("conversion_applied"):
         return extracted
 
-    units = extracted.get("units", "unknown")
-    if units != "in":
+    # Case/spelling-insensitive: a VLM or title block may emit 'IN', 'inch',
+    # 'inches', 'INCH', or '"' — all mean inches and MUST convert. A bare
+    # `units != "in"` check let those silently escape -> the 25.4x bug the whole
+    # tool exists to prevent (caught in review). Normalise before comparing.
+    raw_units = str(extracted.get("units", "unknown")).strip().lower()
+    _INCH_ALIASES = {"in", "inch", "inches", "in.", '"', "imperial"}
+    is_inch = raw_units in _INCH_ALIASES
+    if not is_inch:
         # Nothing to convert — just record the state.
         extracted.setdefault("conversion_applied", False)
         return extracted

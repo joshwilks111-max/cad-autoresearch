@@ -163,17 +163,25 @@ compute it lazily in `load_ground_truth` via `surface_histogram.from_step`). The
 3. **CTC-05 does not inflate.** Its candidate hist {27,29,3} vs GT 156 faces must still leave
    topo well below 1.0 (the histogram is similar-shape but the count vector differs) — assert
    composite stays in the honest 0.66–0.72 band, NOT a spurious jump. (Guards against the
-   histogram being too forgiving on a genuinely incomplete part — the lane7 warning that a
-   box and a sphere both have {Plane:0,Cyl:0}=sim 1.0 is the failure mode to check.)
+   histogram being too forgiving on a genuinely incomplete part — the failure mode to
+   check is two DIFFERENT parts with the SAME face-type counts: e.g. a 20 mm cube vs a
+   50 mm cube (both {Plane:6} → histogram_similarity 1.0 despite different geometry), or
+   two distinct 6-plane prismatic parts. The histogram cannot tell them apart; the exact-
+   count + IoU + bbox layers must. NOTE: a box vs a sphere is NOT this failure — a box is
+   {Plane:6}, a sphere is {Sphere:1}, similarity 0.0 (verified). Counts differ, so the
+   histogram correctly distinguishes them.)
 4. **`tests/test_reward.py` green** + add 2 cases: (a) hybrid == exact when hist args are
    None (back-comp); (b) a known seam-shift pair scores higher under hybrid than under exact.
 5. **Determinism:** the histogram walk is RNG-free; assert byte-identical `histogram.json`
    across two runs of the same candidate.
 
 ## Risk register
-- **Box-vs-sphere false match** (both {Plane:0,Cyl:0}): the HYBRID (0.5 exact + 0.5 hist)
-  contains this — exact-count still penalises it. A pure-histogram swap would NOT; do not
-  swap, blend.
+- **Same-histogram-different-geometry false match** (e.g. a 20 mm cube vs a 50 mm cube,
+  both {Plane:6}, histogram_similarity 1.0): the HYBRID (0.5 exact + 0.5 hist) contains
+  this — exact-count + IoU + bbox still penalise it. A pure-histogram swap would NOT; do
+  not swap, blend. (A box vs a sphere is NOT a false match: {Plane:6} vs {Sphere:1},
+  similarity 0.0 — verified. The histogram only over-forgives when the face-TYPE COUNTS
+  coincide, which is scale/position differences of the same topology, not different shapes.)
 - **GT histogram source drift:** if computed lazily via `from_step`, it must use the SAME
   tessellation-irrelevant B-rep walk (it does — histogram is from the solid, not the mesh).
 - **Guarded-code blast radius:** Changes A+B+C touch runner.py, reward.py, RewardConfig, and a

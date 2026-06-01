@@ -109,15 +109,17 @@ def _is_through(mesh: trimesh.Trimesh, center3d: np.ndarray,
 
 
 def _auto_fracs(span: float, step_mm: float = 4.0,
-                max_planes: int = 13) -> list[float]:
-    """Dense evenly-spaced section fractions (5%..95%) along an axis. ~`step_mm`
-    spacing, clamped to [3, max_planes] planes. Replaces the naive {0.2,0.5,0.8}
-    placement that MISSES a thin feature: an 8mm base in a 44mm-tall part has NO
-    plane through it at fractions of the full 44mm; ~4mm spacing slices it."""
+                max_planes: int = 64) -> list[float]:
+    """Section fractions along an axis at ABSOLUTE ~step_mm spacing (interior 5%..95%).
+
+    Review fix: the old 13-plane CAP made spacing false on big parts (a 200mm part got
+    ~15mm spacing, so a short bore could miss). Cap raised 13->64 so spacing stays
+    ~step_mm up to 256mm. (Face-adjacent planes were tried and reverted — they added
+    near-face phantoms; a near-face blind hole stays a B-rep job.)"""
     if span < 0.5:
         return []
-    n = int(np.clip(round(span / step_mm), 3, max_planes))
-    return list(np.linspace(0.05, 0.95, n))
+    n = int(np.clip(np.ceil(span / step_mm), 3, max_planes))
+    return list(np.linspace(0.05, 0.95, int(n)))
 
 
 def _detect_holes_for_axis(mesh: trimesh.Trimesh, axis_idx: int,
@@ -187,23 +189,28 @@ def _detect_holes_for_axis(mesh: trimesh.Trimesh, axis_idx: int,
                    round(center3d[keep[0]], 0),
                    round(center3d[keep[1]], 0))
             if key in candidates:
+                candidates[key]["hits"] += 1
                 # Keep the one with the tightest circularity
                 if r_std < candidates[key]["r_std"]:
-                    candidates[key] = {
-                        "center3d": center3d,
-                        "r_mean": r,
-                        "r_std": r_std,
-                        "axis_idx": axis_idx,
-                    }
+                    candidates[key].update(center3d=center3d, r_mean=r, r_std=r_std)
             else:
                 candidates[key] = {
                     "center3d": center3d,
                     "r_mean": r,
                     "r_std": r_std,
                     "axis_idx": axis_idx,
+                    "hits": 1,
                 }
 
-    return list(candidates.values())
+    # Multi-plane confirmation (ported from regiondiff._all_holes): a real bore is
+    # sliced by >=2 planes of its axis; a moderately-round junction/corner loop that
+    # sneaks under the cv gate typically appears on ONE plane only. Requiring >=2 hits
+    # drops those phantoms. (Denser sampling after the cap raise made single-plane
+    # junction loops more likely, regressing the L-bracket 4->5; this fixes it.)
+    # Guard: if an axis has <2 planes total a real bore can't get 2 hits, so fall back
+    # to >=1 there (only happens for spans < ~2*step_mm, which already clamp to 3 planes,
+    # so in practice the >=2 rule always applies).
+    return [c for c in candidates.values() if c["hits"] >= 2]
 
 
 def hole_metrics(mesh: trimesh.Trimesh,

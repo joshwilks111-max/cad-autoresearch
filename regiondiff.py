@@ -465,34 +465,25 @@ def _holes_at(mesh: trimesh.Trimesh, axis: int, height: float,
     return holes
 
 
-def _representative_holes(mesh: trimesh.Trimesh, axis: int, lo: np.ndarray,
-                          hi: np.ndarray):
-    """Holes at long-axis fractions 0.2 / 0.5 / 0.8. Returns (holes_at_each, heights);
-    the representative set is the section with the most holes (so a part with through-
-    holes that pinch at mid-height still reports them).
-
-    NOTE: single-axis only — kept for back-compat. The core now uses _all_holes()
-    which sweeps ALL THREE axes (a hole runs along ONE axis; sectioning only the long
-    axis misses holes perpendicular to it — e.g. an L-bracket whose holes run along Y/Z
-    while X is longest)."""
-    span = hi[axis] - lo[axis]
-    heights = [lo[axis] + f * span for f in (0.2, 0.5, 0.8)]
-    per_section = [_holes_at(mesh, axis, h) for h in heights]
-    return per_section, heights
-
-
-def _section_heights(lo_a: float, hi_a: float, max_planes: int = 13,
+def _section_heights(lo_a: float, hi_a: float, max_planes: int = 64,
                      step_mm: float = 4.0) -> list:
-    """Evenly-spaced section heights along one axis. DENSE placement (not 3 bbox
-    fractions) so a THIN feature anywhere along the axis gets a plane through it — the
-    L-bracket's 8mm-thick wall offset to the back of a 60mm-deep part is missed by
-    {0.2,0.5,0.8} fractions but caught by ~4mm spacing. Planes sit at interior offsets
-    (5%..95%) so they never land exactly on an outer face."""
+    """Section heights along one axis at ABSOLUTE ~step_mm spacing (interior 5%..95%).
+
+    Review fix: the old 13-plane CAP made spacing false on big parts — a 200mm part
+    got ~15mm spacing, so a bore whose run-length was under ~2 spacings could hit
+    fewer than min_plane_hits planes and be silently dropped. Cap raised 13->64 so
+    spacing stays ~step_mm up to 256mm; only beyond that does it coarsen. (A bore is
+    detected on the axis it RUNS ALONG, where it spans the feature thickness and is
+    sliced by many planes — so the cap, not face placement, is what fixes the big-part
+    miss. Face-adjacent planes were tried and REVERTED: they section ~1.5mm off a face
+    where edge-rounding/adjacent-hole mouths project as near-circular loops and add
+    phantom 'holes' (regressed the L-bracket 4->5). A near-face BLIND hole stays a
+    B-rep-cylinder-face job, consistent with the documented mesh-section limitation.)"""
     span = hi_a - lo_a
     if span < 1e-6:
         return []
-    n = int(np.clip(round(span / step_mm), 3, max_planes))
-    return [lo_a + f * span for f in np.linspace(0.05, 0.95, n)]
+    n = int(np.clip(np.ceil(span / step_mm), 3, max_planes))
+    return [lo_a + f * span for f in np.linspace(0.05, 0.95, int(n))]
 
 
 def _dedup_holes_3d(holes: list, tol: float) -> list:

@@ -26,14 +26,25 @@ from OCP.Standard import Standard_Failure
 # Internal gate — shared by safe_cut / safe_fuse / safe_intersect
 # ---------------------------------------------------------------------------
 
-def _gate_result(result, pre_vol, label):
-    """Raise ValueError if result is empty or volume collapsed unexpectedly.
+def _gate_result(result, pre_solids, label):
+    """Raise ValueError if a boolean op FAILED. Two real failure signals:
+
+      1. empty / zero-volume result (n_solids==0 or vol<=0) — the op produced
+         nothing (tangent-only contact, pole degeneracy, non-overlapping geometry).
+      2. FRAGMENTATION — the result has MORE disjoint solids than the base started
+         with. A clean cut/fuse keeps the body connected (1 solid in -> 1 solid out);
+         an OCC failure that shatters the body into chips shows up as a solid-count
+         jump. This replaced a fixed >50%-volume-collapse gate that FALSELY rejected
+         valid large cuts (hollowing/shelling/large pockets routinely remove >50% and
+         are correct) — caught in review. We gate on TOPOLOGY (did it shatter?), not on
+         HOW MUCH material was removed.
 
     Args:
-        result:   build123d Shape returned from a boolean op.
-        pre_vol:  volume of the base solid BEFORE the op (None to skip the
-                  collapse check; 0 to allow small results, e.g. intersect).
-        label:    human name for the operation, included in the error message.
+        result:     build123d Shape returned from a boolean op.
+        pre_solids: solid count of the base BEFORE the op (None to skip the
+                    fragmentation check, e.g. for intersect where the base count
+                    isn't the right reference).
+        label:      operation name, included in the error message.
     """
     n = len(result.solids())
     vol = result.volume
@@ -43,11 +54,11 @@ def _gate_result(result, pre_vol, label):
             "tangent-only contact, sphere/cone pole degeneracy, "
             "or non-overlapping geometry."
         )
-    if pre_vol is not None and pre_vol > 0 and vol < 0.5 * pre_vol:
+    if pre_solids is not None and n > pre_solids:
         raise ValueError(
-            f"[{label}] volume collapsed {pre_vol:.4g}->{vol:.4g} — "
-            "likely sequential-cut tolerance accumulation; "
-            "batch cuts into one compound."
+            f"[{label}] result fragmented into {n} disjoint solids (base had "
+            f"{pre_solids}) — the boolean likely failed and shattered the body; "
+            "check for coincident faces, self-intersections, or zero-thickness walls."
         )
 
 
@@ -55,57 +66,61 @@ def _gate_result(result, pre_vol, label):
 # Safe boolean wrappers
 # ---------------------------------------------------------------------------
 
-def safe_cut(base, *tools, label="cut", pre_vol=None):
+def safe_cut(base, *tools, label="cut"):
     """Cut base by each tool in sequence; raise loud ValueError on failure.
+
+    Gates on empty/zero-volume AND fragmentation (result has more disjoint solids
+    than the base). Does NOT reject large material removal — hollowing/shelling/big
+    pockets routinely remove >50% volume and are valid (the old >50% gate falsely
+    rejected them; fixed in review).
 
     Args:
         base:     build123d solid (the stock to cut from).
         *tools:   one or more build123d solids to subtract.
         label:    descriptive name for error messages.
-        pre_vol:  if provided, used for volume-collapse detection. If None
-                  the base volume is measured automatically.
 
     Returns:
         The result solid (build123d shape).
 
     Raises:
-        ValueError: if the result is empty, zero-volume, or shows >50% volume
-                    collapse compared to pre_vol.
+        ValueError: if the result is empty/zero-volume or fragmented into more
+                    disjoint solids than the base started with.
     """
-    if pre_vol is None:
-        pre_vol = base.volume
+    pre_solids = len(base.solids())
     result = base.cut(*tools)
-    _gate_result(result, pre_vol, label)
+    _gate_result(result, pre_solids, label)
     return result
 
 
-def safe_fuse(base, *tools, label="fuse", pre_vol=None):
+def safe_fuse(base, *tools, label="fuse"):
     """Fuse base with each tool; raise loud ValueError on failure.
+
+    Gates on empty/zero-volume AND fragmentation. A clean fuse keeps the body
+    connected; a failure leaving disjoint pieces shows as a solid-count increase.
 
     Args:
         base:     build123d solid (primary body).
         *tools:   one or more build123d solids to fuse with.
         label:    descriptive name for error messages.
-        pre_vol:  baseline volume for collapse detection (auto-measured if None).
 
     Returns:
         The fused result solid.
 
     Raises:
-        ValueError: if the result is empty or zero-volume.
+        ValueError: if the result is empty/zero-volume or fragmented.
     """
-    if pre_vol is None:
-        pre_vol = base.volume
+    pre_solids = len(base.solids())
     result = base.fuse(*tools)
-    _gate_result(result, pre_vol, label)
+    _gate_result(result, pre_solids, label)
     return result
 
 
 def safe_intersect(base, *tools, label="intersect"):
     """Intersect base with tools; raise loud ValueError if result is empty.
 
-    Intersection results are allowed to have small volume (the collapse
-    threshold is not applied). The only gate is non-zero solid count and volume.
+    Intersection legitimately produces small results and may have a different
+    solid count than the base, so the fragmentation check is skipped (pre_solids=
+    None); the only gate is non-zero solid count and volume.
 
     Args:
         base:   build123d solid.
@@ -119,7 +134,7 @@ def safe_intersect(base, *tools, label="intersect"):
         ValueError: if the intersection is empty (non-overlapping geometry).
     """
     result = base.intersect(*tools)
-    _gate_result(result, pre_vol=0, label=label)
+    _gate_result(result, pre_solids=None, label=label)
     return result
 
 
@@ -314,6 +329,18 @@ def _selftest() -> int:
     check("non-overlap cut no-raise (base unchanged)",
           lambda: safe_cut(Box(20, 20, 20),
                            Box(5, 5, 5).translate((100, 0, 0))),
+          expect_raise=False)
+
+    # 2c. REGRESSION: hollowing removes >50% volume (8000 -> ~2168) but is VALID
+    #     (1 solid in, 1 solid out). The old >50% gate FALSELY raised here.
+    check("hollowing cut (>50% removal) no-raise",
+          lambda: safe_cut(Box(20, 20, 20), Box(18, 18, 18)),
+          expect_raise=False)
+
+    # 2d. a large slab pocket (also >50%) must NOT raise — material amount is not failure
+    check("large pocket (>50% removal) no-raise",
+          lambda: safe_cut(Box(20, 20, 20),
+                           Box(20, 20, 14).translate((0, 0, 3))),
           expect_raise=False)
 
     # 3a. revolve profile crossing the axis (x<0) -> raise
