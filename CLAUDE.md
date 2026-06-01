@@ -35,6 +35,13 @@ tests/test_reward.py  validates the grader + runner
 runs/                 ALL runtime output (gitignored)
 ```
 
+## Deeper docs (read on demand)
+`docs/` has the architecture + hard-won knowledge: `ARCHITECTURE.md` (reward layers, loop,
+task model), `reward-design.md` (why), `known-limitations.md` (the landmine map — topology
+ceiling, OCC traps, hole-detection limits, the DEAD config.yaml reward block), `tools-reference.md`
+(the 8 tools), `research-and-deferred.md` (solved / tried-rejected / roadmap). Read
+`known-limitations.md` before concluding a low score means a bad reconstruction.
+
 ## The candidate contract
 A candidate is a Python program that assigns the final solid to a module-level
 variable **`result`** (build123d BuildPart/Part/Solid, or a CadQuery Workplane).

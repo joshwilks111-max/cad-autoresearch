@@ -169,7 +169,30 @@ From **2026-06-15**, headless `claude -p` / Agent SDK usage on subscription plan
 draws from a separate monthly Agent SDK credit allotment. An overnight grid is many
 headless turns — check your plan's limits before launching hundreds of worker-turns.
 
+## Deeper documentation (`docs/`)
+
+For anyone (human or a future AI session) picking this up to *improve the harness*,
+`docs/` holds the architecture + the hard-won knowledge that isn't obvious from the code:
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — reference: the loop, the 7-layer
+  reward with exact weights, the IoU routing, the topology layer, the task model, the
+  sandbox/candidate contract, and a "where to change what" map.
+- **[docs/reward-design.md](docs/reward-design.md)** — *why* the reward is shaped this
+  way: independent layers, the weight rationale, adaptive feature-weighting, the ramps.
+- **[docs/known-limitations.md](docs/known-limitations.md)** — the landmine map: the
+  topology ceiling, round-part IoU, OCC silent booleans, STEP seam-edge merge, the
+  mesh-section hole-detection limits, the small-feature gap, the dead `config.yaml`
+  reward block. **Read before concluding "low score = bad reconstruction" — often it's
+  the reward.**
+- **[docs/tools-reference.md](docs/tools-reference.md)** — the 8 grader-side / authoring
+  tools (preflight, occ_guard, hole_metrics, unit_normalize, regiondiff, perceive,
+  surface_histogram, drawing_extract): CLI, API, known limits, GT-leak boundaries.
+- **[docs/research-and-deferred.md](docs/research-and-deferred.md)** — what's solved,
+  what was tried and rejected (don't redo it), and the ranked deferred roadmap.
+
 ## Honest limitations
+
+(See [docs/known-limitations.md](docs/known-limitations.md) for the full, code-traced list.)
 
 - **The drawing track is unsolved by design.** This repo gives you the loop and the
   reward to *attack* it; it does not magically read dense drawings. Expect the
