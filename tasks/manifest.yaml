@@ -60,6 +60,17 @@ tasks:
     default_track: spec
     notes: Synthetic spec-track validation part — a step up from sample_bracket (hub + bore + chamfer + hole pattern, 15 faces). Reachable to >=0.95; used to validate the loop end-to-end.
 
+  - id: bearing_608
+    tier: easy
+    description: Real 608 bearing envelope — annular ring OD22 / bore8 / width7 mm (4 faces, euler 2).
+    spec: spec.md
+    default_track: spec
+    notes: >
+      Real externally-authored part (public GitHub STEP, not synthetic). A simple annulus =
+      Cylinder(r11,h7) - Cylinder(r4,h7). Low-face (4 faces, euler 2) on the cylindrical-IoU
+      path — the same tractable class as NIST FTC-11. Added to get a SECOND solved real part,
+      since the rest of the NIST suite is 117-270 faces (topology-capped). Reachable to >=0.95.
+
   - id: nist_ftc_11
     tier: easy
     description: NIST PMI FTC-11 — simplest NIST part, 6 faces, flat square plate ~63 x 63 x 3 mm.
