@@ -10,6 +10,21 @@
 # never sees it.
 
 tasks:
+  - id: trial_lbracket
+    tier: medium
+    description: Gusseted L-bracket — 120x60x44 mm, base plate + upright wall + triangular gusset + 6 bolt holes (two planes) + chamfers (~17 faces, prismatic).
+    spec: spec.md
+    drawing: drawing.png
+    default_track: spec
+    notes: >
+      The human-vs-AI TIME TRIAL part (timetrial/). Synthetic but forward-authored as
+      design intent (spec.md) then compiled to GT by make_ground_truth.py — license-clean,
+      no reverse-engineering. Chosen as a fair fight: mid-complexity (~17 faces, not a
+      4-face washer nor a 150-face topology-capped NIST part), clearly PRISMATIC (distinct
+      120/60/44 extents → voxel IoU path, not the rotational-symmetry path), and genuine
+      ~5-10min human CAD work. Graded by timetrial/grade_step.py (B-rep referee) for both
+      competitors. Reachable to >=0.95.
+
   - id: sample_bracket
     tier: easy
     description: 80x50x8 plate, four M5 holes, central through-slot.

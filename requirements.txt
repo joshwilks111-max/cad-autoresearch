@@ -1,4 +1,7 @@
 # Core — required. Versions are lower bounds verified against the build.
+# IMPORTANT: build123d 0.10 requires Python < 3.14 (the OCP/cadquery-ocp wheels stop at
+# 3.13). On 3.14 the install fails on the OCP wheel. Fast clean path:
+#   uv venv --python 3.13 && uv pip install -r requirements.txt
 build123d>=0.9        # Pythonic B-rep CAD on OpenCASCADE; STEP/STL export (pulls OCP)
 trimesh>=4.0          # mesh load + surface/volume sampling
 numpy>=1.26

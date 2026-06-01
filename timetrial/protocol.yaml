@@ -1,0 +1,18 @@
+# Machine-readable pre-registration for the time trial. Fixed BEFORE any run.
+# Changing these after a run invalidates the result — they are the contract.
+task: trial_lbracket
+input_track: drawing            # both competitors get tasks/trial_lbracket/drawing.png
+forbidden_inputs:               # neither competitor may open these
+  - tasks/trial_lbracket/ground_truth/      # the answer key
+  - tasks/trial_lbracket/spec.md            # (drawing track: derive geometry from the drawing only)
+verified_correct_bar: 0.95      # composite >= this, via timetrial/grade_step.py
+referee: timetrial/grade_step.py            # the ONE grading path for both sides
+tessellation_tolerance: 0.05    # pinned across GT / human / AI meshes
+primary_metric: turns_to_verified           # deterministic
+secondary_metric: wall_clock_seconds        # end-to-end, inference incl.; NOT summed build seconds
+ai_feedback: pass_fail_plus_own_renders     # NO ground-truth deltas or GT-overlay renders
+python: "3.13.x"                # build123d 0.10 requires <3.14
+revision_round:
+  # the EXACT dimensional change, pre-registered so neither side can renegotiate it
+  change: "increase the base bolt-hole pattern X-spacing from 90mm (±45) to 98mm (±49)"
+  revised_task: trial_lbracket_rev            # GT rebuilt with the one changed dim

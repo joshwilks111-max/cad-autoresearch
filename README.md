@@ -61,8 +61,10 @@ python tasks/sample_bracket/make_ground_truth.py
 python run_inner_loop.py --task sample_bracket --proposer mock --budget 5
 ```
 
-Needs Python 3.10+. `build123d` pulls OpenCASCADE (OCP) — a large wheel, give it a
-minute.
+Needs Python **3.10–3.13** (build123d 0.10 requires `<3.14` — the OCP wheels stop at
+3.13; on 3.14 the install fails on the OCP wheel). The clean path is
+`uv venv --python 3.13 && uv pip install -r requirements.txt`. `build123d` pulls
+OpenCASCADE (OCP) — a large wheel, give it a minute.
 
 ## Quickstart — offline, no API
 
