@@ -301,7 +301,17 @@ def _load_mesh(path: str) -> trimesh.Trimesh:
             raise RuntimeError(f"candidate failed: {rr.error}\n{rr.stderr}")
         return rr.mesh
 
-    # STL, STEP, OBJ, etc.
+    if p.suffix.lower() in (".step", ".stp"):
+        # trimesh has NO OCC backend -> trimesh.load("x.step") silently fails. STEP must
+        # go through build123d's kernel import, then tessellate (same as regiondiff /
+        # timetrial.grade_step). Tolerance 0.05 matches the harness sandbox export.
+        from build123d import import_step, export_stl
+        solid = import_step(str(p))
+        out = Path(tempfile.mkdtemp(prefix="_lane3_step_")) / "in.stl"
+        export_stl(solid, str(out), tolerance=0.05)
+        return trimesh.load(str(out), force="mesh")
+
+    # STL, OBJ, PLY, etc. — formats trimesh parses natively.
     return trimesh.load(str(p), force="mesh")
 
 

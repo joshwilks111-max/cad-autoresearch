@@ -69,7 +69,12 @@ def surface_histogram(solid) -> dict:
 
     hist: dict[str, int] = {k: 0 for k in _CANONICAL_KEYS}
 
-    # Accept a raw OCC shape or a build123d wrapper.
+    # Accept a raw OCC shape, a build123d Solid/Part/Compound, OR a BuildPart builder
+    # (the candidate contract assigns `result = p` where p is a BuildPart — its .wrapped
+    # is not a face-walkable shape, but .part is the resolved Part). Resolve a BuildPart
+    # to its .part first, then take .wrapped.
+    if hasattr(solid, "part") and not hasattr(solid, "wrapped"):
+        solid = solid.part
     shape = getattr(solid, "wrapped", solid)
 
     exp = TopExp_Explorer(shape, TopAbs_FACE)
