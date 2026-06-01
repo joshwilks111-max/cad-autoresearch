@@ -59,6 +59,16 @@ themselves.
   truth. The meta agent (outer loop) may edit ONLY `program.md`.
 - Builds run in a subprocess with a timeout; a failure is graded 0, not crashed.
 
+## Branching & shipping
+- **New substantive work starts on a `feat/`-prefixed branch off `main`** — not on
+  `main` directly. This is what lets `/ship` work: it lands a feature branch into the
+  base via a reviewed PR. `/ship` ABORTS on the base branch (nothing to land).
+- Trivial one-liners (typo, comment, version bump) may go straight to `main`.
+- `main` is the base/default branch. Don't rewrite its pushed history to fake a PR.
+- The 8 grading/authoring tools + their `/review` fixes (commits `ae0530a`..`33d00c6`)
+  landed directly on `main` before this convention existed — that was the old pattern;
+  going forward, branch first.
+
 ## Token discipline (matches how this is meant to be run)
 - Use **Opus** for planning, decomposition, and the hard drawing-track reading;
   use **Sonnet** to grind many execution attempts where the spec is clear. Set per
