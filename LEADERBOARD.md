@@ -16,7 +16,7 @@ proposer, no orchestrator/watcher). 8/16 tasks solved >= 0.95 (mean composite of
 | 7 | thinwall_box | easy | spec | 0.993 | 11 | solved |
 | 8 | nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, round washer) |
 | 9 | nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) |
-| 10 | nist_ctc_05 | hard | drawing | 0.646 | 156 | real partial (profile WIP, vol +14%) |
+| 10 | nist_ctc_05 | hard | drawing | 0.688 | 156 | real partial (geometry-near-best; topology+angular capped) |
 | 11 | nist_stc_06 | hard | drawing | 0.628 | 144 | real partial (drawing track) |
 | - | pulley_vgroove | easy | spec | 0.560b | 13 | scaffolded (round, baseline) |
 | - | slotted_ring | easy | spec | 0.415b | 33 | scaffolded (round, baseline) |
@@ -30,15 +30,26 @@ path, all reachable to >=0.95 — they are queued quick wins. The 2 remaining `n
 hard parts (ftc_07, ctc_03) are bbox baselines; ftc_07 is a 3-shell multibody (OCC
 fragment hazard) and ctc_03 a 1.4%-fill thin-wall lattice (euler=95) — both deferred.
 
-**nist_ctc_05 (0.646, real partial, WIP):** a large coaxial stepped turning (tiered
-lathe shaft: O558.8 base flange -> conical shoulder -> O304.8 tower -> conical skirt ->
-O63.5 spindle, central bore + 10 counterbored bolt holes), reconstructed by measuring
-the GT cross-sections (no answer-key read). Watertight; vol/bbox/chamfer/siou all land
-(bbox 0.939, cham 0.933, siou 0.813). It is NOT solved: volume is +14% because the
-revolved outer profile's cone breakpoints are still wrong (the GT keeps a wide ~r268
-radius up through z~124 and tapers gradually with r~100 persisting to z~400; the current
-profile collapses to the thin spindle too early). The fix is a profile correction from
-the GT radius-vs-z diagnostic (`runs/_ctc05_gtprofile.py`); next iteration target.
+**nist_ctc_05 (0.688, real partial — geometry-near-best, topology+angular capped):** a
+large coaxial stepped turning / flanged housing (Ø558.8 base flange, Ø304.8 tower,
+conical skirt, Ø63.5 spindle, Ø254 central bore + 10 counterbored bolt holes),
+reconstructed by measuring the GT outer silhouette (`runs/_ctc05_gtprofile2.py`,
+calibrated zero-bias vertex method) + per-band interior occupancy. Up from 0.646: the
+base solid revolve is +14% over volume; a NARROW axial void (r72, z124..200) up the
+over-filled tower region trims that to +4% (vol layer 0.530->0.872) while preserving the
+larger-radius (r,z) occupancy the cylindrical IoU scores. The void radius/extent was
+picked by a parallel parameter sweep over {radius, z-window}. Full layers: vol 0.872 /
+bbox 0.939 / topo 0.286 / iou 0.544 / cham 0.941 / siou 0.838.
+
+It is NOT >=0.95, for two MEASURED reasons (not defects). (1) **Non-axisymmetric body:**
+upper-body z-sections reach r_out~112 yet are only ~50% filled (material at BOTH the axis
+and the rim = webs/lugs, not a body of revolution), so a revolve caps the cylindrical IoU
+~0.54. A WIDE revolved cavity that fully corrects the volume craters IoU worse (the sweep
+scored every hollow variant 0.52-0.58, iou 0.18-0.32 — below this); the narrow short void
+is the best compromise. (2) **Topology-capped:** 156 GT B-rep faces vs a revolve's ~57
+(topo 0.286); at the adaptive weight this caps the composite ~0.88 even with perfect
+geometry. Same ceiling class as FTC-09 (0.758); unlike the 6-face FTC-11 (0.956). 0.688
+is the honest geometry-near-best for the revolve family.
 
 **Reward honesty (commit ce73b7d):** two audited-then-fixed reward bugs. (1) topology
 schema-mismatch — a mesh-proxy candidate vs a B-rep GT shared only `euler` (different
