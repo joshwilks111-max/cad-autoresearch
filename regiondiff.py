@@ -437,17 +437,23 @@ def _section_loops(mesh: trimesh.Trimesh, axis: int, height: float):
 
 
 def _holes_at(mesh: trimesh.Trimesh, axis: int, height: float,
-              cv_max: float = 0.35) -> list:
+              cv_max: float = 0.15) -> list:
     """Inner loops at a section height, classified as holes. The OUTER boundary is
-    the loop with the largest shoelace area; every other closed loop is an inner
-    feature. A loop is reported as a (roughly circular) HOLE if r_std/r_mean < cv_max
-    -- a slot/pocket has a high CV and is still counted but flagged loosely."""
+    the loop with the largest shoelace area; every other closed loop is a candidate
+    inner feature, ACCEPTED as a (round) hole only if r_std/r_mean < cv_max.
+
+    cv_max=0.15: a clean bore sections to a near-perfect circle (cv ~0.01); gusset/wall
+    junction loops and tangential grazes have cv 0.4-0.7. The old 0.35 admitted those
+    junction artifacts as phantom 'holes' (measured: an L-bracket gusset edge -> a
+    spurious r=11 'hole' at cv=0.44). 0.15 keeps real bores, drops the junk."""
     loops = _section_loops(mesh, axis, height)
     if len(loops) < 2:
         return []
     loops.sort(key=lambda t: -t[0])     # outer first (max area)
     holes = []
     for area, ctr, r_mean, r_cv in loops[1:]:
+        if r_cv > cv_max:               # not circular enough -> not a hole
+            continue
         wc = [0.0, 0.0, 0.0]
         inplane = [d for d in range(3) if d != axis]
         wc[inplane[0]] = round(float(ctr[0]), 1)
@@ -463,20 +469,87 @@ def _representative_holes(mesh: trimesh.Trimesh, axis: int, lo: np.ndarray,
                           hi: np.ndarray):
     """Holes at long-axis fractions 0.2 / 0.5 / 0.8. Returns (holes_at_each, heights);
     the representative set is the section with the most holes (so a part with through-
-    holes that pinch at mid-height still reports them)."""
+    holes that pinch at mid-height still reports them).
+
+    NOTE: single-axis only — kept for back-compat. The core now uses _all_holes()
+    which sweeps ALL THREE axes (a hole runs along ONE axis; sectioning only the long
+    axis misses holes perpendicular to it — e.g. an L-bracket whose holes run along Y/Z
+    while X is longest)."""
     span = hi[axis] - lo[axis]
     heights = [lo[axis] + f * span for f in (0.2, 0.5, 0.8)]
     per_section = [_holes_at(mesh, axis, h) for h in heights]
     return per_section, heights
 
 
+def _section_heights(lo_a: float, hi_a: float, max_planes: int = 13,
+                     step_mm: float = 4.0) -> list:
+    """Evenly-spaced section heights along one axis. DENSE placement (not 3 bbox
+    fractions) so a THIN feature anywhere along the axis gets a plane through it — the
+    L-bracket's 8mm-thick wall offset to the back of a 60mm-deep part is missed by
+    {0.2,0.5,0.8} fractions but caught by ~4mm spacing. Planes sit at interior offsets
+    (5%..95%) so they never land exactly on an outer face."""
+    span = hi_a - lo_a
+    if span < 1e-6:
+        return []
+    n = int(np.clip(round(span / step_mm), 3, max_planes))
+    return [lo_a + f * span for f in np.linspace(0.05, 0.95, n)]
+
+
+def _dedup_holes_3d(holes: list, tol: float) -> list:
+    """Collapse holes within `tol` of each other (3D world center) into one, keeping the
+    tightest-radius (lowest-CV proxy) representative. Used as the FINAL cross-axis merge
+    after per-axis confirmation."""
+    kept: list = []
+    for h in sorted(holes, key=lambda x: x.radius):   # smaller/tighter first
+        wc = np.asarray(h.world_center, dtype=float)
+        if not any(np.linalg.norm(wc - np.asarray(k.world_center, dtype=float)) <= tol
+                   for k in kept):
+            kept.append(h)
+    return kept
+
+
+def _all_holes(mesh: trimesh.Trimesh, lo: np.ndarray, hi: np.ndarray,
+               tol: float, min_plane_hits: int = 2) -> list:
+    """Detect physical bores by sweeping ALL THREE axes with DENSE section planes, but
+    only ACCEPT a bore that is confirmed on >= min_plane_hits planes OF THE SAME AXIS.
+
+    Why per-axis confirmation: a real through-hole running along axis A is sliced cleanly
+    by many of A's planes (stable in-plane center). A plane of a FOREIGN axis that merely
+    grazes that bore tangentially yields a one-off partial arc at a slightly different
+    place — it shows up on a single plane and is rejected. This kills the cross-axis
+    over-count (one bore spawning spurious arcs on the other two axes) without loosening
+    the dedup radius (which would wrongly merge two genuinely close holes).
+
+    Three fixes over the original single-long-axis 3-fraction sweep: (1) all 3 axes,
+    (2) dense ~4mm planes so a hole in a thin offset feature is sliced, (3) per-axis
+    multi-plane confirmation so grazes don't inflate the count."""
+    per_axis: list = []
+    for ax in range(3):
+        # bucket this axis's detections by rounded in-plane center
+        buckets: dict = {}
+        for h in _section_heights(float(lo[ax]), float(hi[ax])):
+            for hole in _holes_at(mesh, ax, h):
+                key = (round(hole.center[0], 0), round(hole.center[1], 0))
+                buckets.setdefault(key, []).append(hole)
+        # accept buckets confirmed on >= min_plane_hits planes; representative = median-ish
+        for key, hits in buckets.items():
+            if len(hits) >= min_plane_hits:
+                hits.sort(key=lambda x: x.radius)
+                per_axis.append(hits[len(hits) // 2])   # middle hit (robust center/radius)
+    return _dedup_holes_3d(per_axis, tol)
+
+
 def _match_holes(cand_holes: list, gt_holes: list, pitch: float):
-    """Diff two hole sets by nearest centroid (within ~2 pitch). Returns
-    (missing[(x,y,r)], extra[(x,y,r)], resized[(x,y,gt_r,cand_r)]) where missing = in
-    GT not matched in cand, extra = in cand not matched in GT, and resized = matched
+    """Diff two hole sets by nearest 3D centroid (within ~2 pitch). Returns
+    (missing[(x,y,z,r)], extra[(x,y,z,r)], resized[(x,y,z,gt_r,cand_r)]) where missing =
+    in GT not matched in cand, extra = in cand not matched in GT, and resized = matched
     in position but the radius differs by more than ~1 pitch (a wrong-size bore /
     counterbore -- positionally correct but the diameter is off, which the centroid
-    match alone would silently call a hit)."""
+    match alone would silently call a hit).
+
+    Matches on WORLD_CENTER (3D): holes can now be detected on any of the three section
+    axes, so their per-section 2D `center` frames are incommensurable — only the 3D
+    world center is comparable across axes."""
     tol = max(2.0 * pitch, 3.0)
     # Radius is read directly off the section's 2D vertices (sub-pitch accurate,
     # independent of the voxel grid), so the resize tolerance can be tighter than a
@@ -487,22 +560,22 @@ def _match_holes(cand_holes: list, gt_holes: list, pitch: float):
     missing = []
     resized = []
     for gh in gt_holes:
-        gc = np.asarray(gh.center)
+        gc = np.asarray(gh.world_center, dtype=float)
         best, bi = tol + 1, -1
         for i, ch in enumerate(cand_holes):
             if used[i]:
                 continue
-            d = float(np.linalg.norm(np.asarray(ch.center) - gc))
+            d = float(np.linalg.norm(np.asarray(ch.world_center, dtype=float) - gc))
             if d < best:
                 best, bi = d, i
         if bi >= 0 and best <= tol:
             used[bi] = True
             if abs(cand_holes[bi].radius - gh.radius) > r_tol:
-                resized.append((gh.center[0], gh.center[1], gh.radius,
-                                cand_holes[bi].radius))
+                resized.append((*[round(float(x), 1) for x in gh.world_center],
+                                gh.radius, cand_holes[bi].radius))
         else:
-            missing.append((gh.center[0], gh.center[1], gh.radius))
-    extra = [(ch.center[0], ch.center[1], ch.radius)
+            missing.append((*[round(float(x), 1) for x in gh.world_center], gh.radius))
+    extra = [(*[round(float(x), 1) for x in ch.world_center], ch.radius)
              for i, ch in enumerate(cand_holes) if not used[i]]
     return missing, extra, resized
 
@@ -605,14 +678,13 @@ def regiondiff(cand_mesh: trimesh.Trimesh, ref_mesh: trimesh.Trimesh,
     dense = False
     if holes == "section":
         try:
-            c_per, c_hs = _representative_holes(cand, axis_i, lo_u, hi_u)
-            g_per, g_hs = _representative_holes(gt, axis_i, lo_u, hi_u)
-            hole_section_hs = [round(float(h), 1) for h in g_hs]
-            # representative section = the GT section exposing the most holes
-            g_counts = [len(h) for h in g_per]
-            ri = int(np.argmax(g_counts)) if g_counts else 1
-            gt_holes_rep = g_per[ri] if g_per else []
-            cand_holes_rep = c_per[ri] if c_per else []
+            # Sweep ALL THREE axes (a hole runs along ONE axis; the old single-long-axis
+            # sweep missed holes perpendicular to the band axis). Dedup to physical bores
+            # by 3D world-center proximity at ~one hole-diameter tolerance.
+            dedup_tol = max(3.0 * pitch_v, 4.0)
+            cand_holes_rep = _all_holes(cand, lo_u, hi_u, dedup_tol)
+            gt_holes_rep = _all_holes(gt, lo_u, hi_u, dedup_tol)
+            hole_section_hs = [0.2, 0.5, 0.8]   # per-axis fractions (now all 3 axes)
             holes_found = len(cand_holes_rep)
             holes_expected = len(gt_holes_rep)
             # Dense field (e.g. CTC-05's 29 holes): don't enumerate; report counts.
@@ -700,25 +772,28 @@ def _render_text(*, cand_label, ref_label, pitch, axis_name, axis_len, align,
 
     if holes_mode == "section":
         hs = "/".join(f"{h:g}" for h in hole_hs) if hole_hs else "?"
-        L.append(f"─ holes (section count @ {axis_name}={hs}) ─")
+        L.append(f"─ holes (all-axis section @ frac {hs}) ─")
         if dense:
             L.append(f"  found {holes_found}, GT has {holes_expected}  "
                      f"(dense field — counts only, not enumerated)")
         else:
+            # Hole tuples are now (x, y, z, r) — centers are 3D (mixed section axes).
             mtxt = ""
             if missing_holes:
-                near = "; ".join(f"({x:g},{y:g}) r≈{r:g}" for x, y, r in missing_holes[:4])
+                near = "; ".join(f"({x:g},{y:g},{z:g}) r≈{r:g}"
+                                 for x, y, z, r in missing_holes[:4])
                 mtxt = f"  → MISSING {len(missing_holes)} near {near}"
             etxt = ""
             if extra_holes:
-                near = "; ".join(f"({x:g},{y:g}) r≈{r:g}" for x, y, r in extra_holes[:4])
+                near = "; ".join(f"({x:g},{y:g},{z:g}) r≈{r:g}"
+                                 for x, y, z, r in extra_holes[:4])
                 etxt = f";  extra {len(extra_holes)} near {near}"
             elif not missing_holes:
                 etxt = ";  extra 0"
             rtxt = ""
             if resized_holes:
-                near = "; ".join(f"({x:g},{y:g}) r {cr:g}→GT {gr:g}"
-                                 for x, y, gr, cr in resized_holes[:4])
+                near = "; ".join(f"({x:g},{y:g},{z:g}) r {cr:g}→GT {gr:g}"
+                                 for x, y, z, gr, cr in resized_holes[:4])
                 rtxt = f";  WRONG RADIUS {len(resized_holes)}: {near}"
             if not missing_holes and not extra_holes and not resized_holes:
                 L.append(f"  found {holes_found}, GT has {holes_expected}  → holes MATCH")
@@ -753,15 +828,15 @@ def _correction_line(*, vol_delta_pct, axis_name, bands, extra_blob, missing_blo
         parts.append(f"add ~{abs(b.delta_pct):.0f}% material around {axis_name}={b.lo:g}-{b.hi:g}")
     if not dense:
         if missing_holes:
-            x, y, r = missing_holes[0]
-            parts.append(f"add {len(missing_holes)} hole(s) near ({x:g},{y:g}) r≈{r:g}")
+            x, y, z, r = missing_holes[0]
+            parts.append(f"add {len(missing_holes)} hole(s) near ({x:g},{y:g},{z:g}) r≈{r:g}")
         if extra_holes:
-            x, y, r = extra_holes[0]
-            parts.append(f"remove {len(extra_holes)} hole(s) near ({x:g},{y:g})")
+            x, y, z, r = extra_holes[0]
+            parts.append(f"remove {len(extra_holes)} hole(s) near ({x:g},{y:g},{z:g})")
         if resized_holes:
-            x, y, gr, cr = resized_holes[0]
+            x, y, z, gr, cr = resized_holes[0]
             verb = "shrink" if cr > gr else "enlarge"
-            parts.append(f"{verb} {len(resized_holes)} hole(s) near ({x:g},{y:g}) to r≈{gr:g}")
+            parts.append(f"{verb} {len(resized_holes)} hole(s) near ({x:g},{y:g},{z:g}) to r≈{gr:g}")
     elif holes_found != holes_expected:
         d = holes_expected - holes_found
         parts.append(f"{'add' if d > 0 else 'remove'} {abs(d)} hole(s) (dense field)")

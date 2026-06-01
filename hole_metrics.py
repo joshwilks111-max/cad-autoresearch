@@ -108,12 +108,27 @@ def _is_through(mesh: trimesh.Trimesh, center3d: np.ndarray,
     return bool(not inside.any())
 
 
+def _auto_fracs(span: float, step_mm: float = 4.0,
+                max_planes: int = 13) -> list[float]:
+    """Dense evenly-spaced section fractions (5%..95%) along an axis. ~`step_mm`
+    spacing, clamped to [3, max_planes] planes. Replaces the naive {0.2,0.5,0.8}
+    placement that MISSES a thin feature: an 8mm base in a 44mm-tall part has NO
+    plane through it at fractions of the full 44mm; ~4mm spacing slices it."""
+    if span < 0.5:
+        return []
+    n = int(np.clip(round(span / step_mm), 3, max_planes))
+    return list(np.linspace(0.05, 0.95, n))
+
+
 def _detect_holes_for_axis(mesh: trimesh.Trimesh, axis_idx: int,
-                            section_fracs: Sequence[float],
+                            section_fracs: Sequence[float] | None,
                             circ_threshold: float = 0.15) -> list[dict]:
     """
     Detect hole candidates by sectioning perpendicular to axis_idx (0=X,1=Y,2=Z).
     Returns a list of candidate hole dicts keyed by (center, radius).
+
+    section_fracs=None -> dense auto-placement (every ~4mm), so a hole in a thin
+    feature anywhere along the axis is sliced. An explicit sequence overrides it.
     """
     normal = np.zeros(3)
     normal[axis_idx] = 1.0
@@ -124,10 +139,12 @@ def _detect_holes_for_axis(mesh: trimesh.Trimesh, axis_idx: int,
     if span < 0.5:
         return []
 
+    fracs = _auto_fracs(span) if section_fracs is None else list(section_fracs)
+
     # Collect candidate holes across sections; deduplicate by proximity
     candidates: dict[tuple, dict] = {}  # key=(rounded center3d, axis_idx)
 
-    for frac in section_fracs:
+    for frac in fracs:
         pos = bounds_min[axis_idx] + frac * span
         origin = mesh.centroid.copy()
         origin[axis_idx] = pos
@@ -190,7 +207,7 @@ def _detect_holes_for_axis(mesh: trimesh.Trimesh, axis_idx: int,
 
 
 def hole_metrics(mesh: trimesh.Trimesh,
-                 section_fracs: Sequence[float] = (0.2, 0.5, 0.8),
+                 section_fracs: Sequence[float] | None = None,
                  circ_threshold: float = 0.15) -> dict:
     """
     Analyse a mesh for through and blind holes.
@@ -198,7 +215,10 @@ def hole_metrics(mesh: trimesh.Trimesh,
     Parameters
     ----------
     mesh : trimesh.Trimesh
-    section_fracs : fractions of the bounding box at which to section
+    section_fracs : fractions of the bounding box at which to section. DEFAULT None =
+        dense auto-placement (~every 4mm per axis), which catches holes in a thin
+        feature (e.g. an 8mm base of a 44mm-tall part) that the old fixed {0.2,0.5,0.8}
+        missed entirely. Pass an explicit sequence to override.
     circ_threshold : r_std/r_mean threshold for accepting a loop as circular
 
     Returns
@@ -207,7 +227,7 @@ def hole_metrics(mesh: trimesh.Trimesh,
     """
     all_candidates: list[dict] = []
 
-    # Search along all three principal axes
+    # Search along all three principal axes (section_fracs=None -> dense per-axis)
     for ax in range(3):
         cands = _detect_holes_for_axis(mesh, ax, section_fracs, circ_threshold)
         all_candidates.extend(cands)
@@ -291,12 +311,13 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help="Output JSON")
     parser.add_argument(
         "--sections",
-        default="0.2,0.5,0.8",
-        help="Comma-separated section fractions (default: 0.2,0.5,0.8)",
+        default=None,
+        help="Comma-separated section fractions (default: dense auto-placement ~every 4mm). "
+             "Pass e.g. 0.2,0.5,0.8 to override.",
     )
     args = parser.parse_args()
 
-    fracs = [float(x) for x in args.sections.split(",")]
+    fracs = [float(x) for x in args.sections.split(",")] if args.sections else None
     mesh = _load_mesh(args.mesh)
     result = hole_metrics(mesh, section_fracs=fracs)
 
