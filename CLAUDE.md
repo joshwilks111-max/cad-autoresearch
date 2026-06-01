@@ -69,6 +69,29 @@ themselves.
   landed directly on `main` before this convention existed — that was the old pattern;
   going forward, branch first.
 
+## Skill routing (gstack)
+When a request matches a gstack skill, invoke it via the Skill tool. When in doubt, invoke it.
+- Bugs / errors / "why does X fail" → `/investigate`
+- Code review / diff check before landing → `/review`
+- QA / testing site behavior → `/qa` or `/qa-only`
+- Ship / deploy / create a PR → `/ship` (from a `feat/` branch, never the base)
+- Full review gauntlet on a plan → `/autoplan`
+- Strategy/scope → `/plan-ceo-review`; architecture → `/plan-eng-review`
+- Save / resume progress → `/context-save` / `/context-restore`
+- Web browsing → `/browse` (never the chrome MCP tools directly)
+
+## gstack best practices (always-on)
+- **Boil the Lake:** AI makes completeness cheap — do the whole thing (tests, edge
+  cases, error paths), not the demo path. Flag true oceans (rewrites), don't punt lakes.
+- **Verify before asserting:** this stack moves weekly. Confirm flags/APIs/schemas
+  against source-on-disk, recent docs, or a direct test before acting. Say so if a claim
+  is from memory and unverified. Running code wins over training memory.
+- **Search before building:** reuse Layer-1 (tried-and-true) and scrutinise Layer-2
+  (new/popular) before reinventing; prize first-principles when they contradict dogma.
+- **Decisions are the user's:** surface close calls via AskUserQuestion (one clear
+  recommendation + honest tradeoffs); don't auto-decide architecture, scope, or
+  destructive actions.
+
 ## Token discipline (matches how this is meant to be run)
 - Use **Opus** for planning, decomposition, and the hard drawing-track reading;
   use **Sonnet** to grind many execution attempts where the spec is clear. Set per
