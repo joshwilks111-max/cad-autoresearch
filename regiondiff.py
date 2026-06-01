@@ -119,12 +119,54 @@ class RegionDiff:
 # --------------------------------------------------------------------------- #
 #  Mesh loading
 # --------------------------------------------------------------------------- #
+# trimesh has NO OCC backend, so it cannot parse STEP — `trimesh.load("x.step")`
+# silently fails. STEP must go through build123d's kernel import, then tessellate.
+# Same pattern (and tolerance) as timetrial/grade_step.py so a STEP ref/candidate
+# graded here matches the referee's mesh.
+_STEP_TESS_TOL = 0.05
+
+
+def _step_to_mesh(path: Path) -> trimesh.Trimesh:
+    """import_step (OCC kernel) -> tessellate at the pinned tolerance -> trimesh.
+    The path trimesh.load() can't do for STEP."""
+    from build123d import import_step, export_stl
+    try:
+        solid = import_step(str(path))
+    except Exception as e:
+        raise SystemExit(
+            f"could not import STEP {path}: {e!r}\n"
+            "  -> export as AP242/AP203, mm units, a SOLID body (not a surface/mesh export)"
+        )
+    ws = Path(tempfile.mkdtemp(prefix=f"regiondiff_step_{os.getpid()}_"))
+    stl = ws / "ref.stl"
+    try:
+        export_stl(solid, str(stl), tolerance=_STEP_TESS_TOL)
+        mesh = trimesh.load(str(stl), force="mesh")
+    except Exception as e:
+        raise SystemExit(f"could not tessellate STEP {path}: {e!r}\n"
+                         "  -> the imported solid may be invalid; heal it in CAD")
+    if mesh is None or len(getattr(mesh, "faces", [])) == 0:
+        raise SystemExit(f"STEP {path} tessellated to an empty mesh")
+    return mesh
+
+
+def _load_mesh_path(path: Path, what: str) -> trimesh.Trimesh:
+    """Load a geometry file by suffix: STEP via the OCC kernel; mesh formats via
+    trimesh directly."""
+    suffix = path.suffix.lower()
+    if suffix in (".step", ".stp"):
+        return _step_to_mesh(path)
+    mesh = trimesh.load(str(path), force="mesh")
+    if mesh is None or len(getattr(mesh, "faces", [])) == 0:
+        raise SystemExit(f"failed to load a {what} mesh from {path}")
+    return mesh
+
+
 def _load_candidate_mesh(path: Path, build_timeout: int = 120) -> trimesh.Trimesh:
     """Load a candidate. A .py is built via harness.run_candidate in a UNIQUE temp
-    workspace (NEVER runs/manual -- shared-workspace race). A .step/.stl is loaded
-    straight through trimesh."""
-    suffix = path.suffix.lower()
-    if suffix == ".py":
+    workspace (NEVER runs/manual -- shared-workspace race). A .step goes through the
+    OCC kernel; .stl/.obj/.ply through trimesh."""
+    if path.suffix.lower() == ".py":
         from harness import run_candidate
         code = path.read_text(encoding="utf-8")        # utf-8: candidates may carry em-dashes etc.
         ws = Path(tempfile.mkdtemp(prefix=f"regiondiff_{os.getpid()}_"))
@@ -132,23 +174,17 @@ def _load_candidate_mesh(path: Path, build_timeout: int = 120) -> trimesh.Trimes
         if not run.ok or run.mesh is None:
             raise SystemExit(f"candidate build failed: {run.error}\n{run.stderr[-1500:]}")
         return run.mesh
-    # .step / .stl / .stp / anything trimesh understands
-    mesh = trimesh.load(str(path), force="mesh")
-    if mesh is None or len(getattr(mesh, "faces", [])) == 0:
-        raise SystemExit(f"failed to load a mesh from {path}")
-    return mesh
+    return _load_mesh_path(path, "candidate")
 
 
 def _load_reference_mesh(ref: str) -> trimesh.Trimesh:
     """A reference is either a task_id (-> run_inner_loop.load_task + load_ground_truth)
     or a path to a .step/.stl. The task_id path is how a grader compares against the
-    hidden GT; the path form is for ad-hoc A/B."""
+    hidden GT; the path form is for ad-hoc A/B (a .step now routes through the OCC
+    kernel, since trimesh cannot parse STEP)."""
     p = Path(ref)
     if p.exists() and p.suffix.lower() in (".step", ".stp", ".stl", ".obj", ".ply"):
-        mesh = trimesh.load(str(p), force="mesh")
-        if mesh is None or len(getattr(mesh, "faces", [])) == 0:
-            raise SystemExit(f"failed to load a reference mesh from {p}")
-        return mesh
+        return _load_mesh_path(p, "reference")
     # treat as a task_id
     from run_inner_loop import load_task, load_ground_truth
     task = load_task(ref)

@@ -439,13 +439,80 @@ def overlay_png(cand_mesh: trimesh.Trimesh, ref_mesh: trimesh.Trimesh,
 #  CLI entry point
 # ---------------------------------------------------------------------------
 
+def _selftest() -> int:
+    """GT-free self-test: build the bearing in-memory (via its GENERATOR script,
+    not its ground_truth/), export to a scratch STL, and ASCII-diff the part against
+    ITSELF. A part vs itself must be overlap-dominated (mostly '#', no '+'/'.'),
+    2D-IoU ~1.0 in every view. Never reads any ground_truth/ file."""
+    import importlib.util
+    print("=" * 60)
+    print("perceive.py self-test (GT-free: bearing vs itself)")
+    print("=" * 60)
+
+    # Build the bearing from its generator (the authoring path, not the GT geometry).
+    here = Path(__file__).resolve().parent
+    gen = here / "tasks" / "bearing_608" / "make_ground_truth.py"
+    spec = importlib.util.spec_from_file_location("bearing_gen", str(gen))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    solid = mod.build()
+
+    from build123d import export_stl
+    ws = Path(tempfile.mkdtemp(prefix="perceive_selftest_"))
+    stl = ws / "bearing.stl"
+    export_stl(solid, str(stl), tolerance=0.05)
+
+    mesh = _load_mesh(stl)
+    n_pass = n_fail = 0
+    # A part vs itself must be overlap-DOMINATED. At a finite 64x32 raster, a single
+    # silhouette-edge cell can land on a bin boundary and shimmer to one '+' + one
+    # '.' — that's rasterization noise, not misalignment. The honest bar: lots of
+    # '#', divergence <= 2 cells per view (and the tool's own 2D-IoU == 1.00).
+    DIVERGENCE_TOL = 2
+    for view in ("front", "top", "right"):
+        txt = ascii_diff(mesh, mesh, view=view, grid=(64, 32))
+        n_both = txt.count("#")
+        n_extra = txt.count("+")
+        n_missing = txt.count("·")  # middle dot
+        ok = (n_both > 0) and (n_extra <= DIVERGENCE_TOL) and (n_missing <= DIVERGENCE_TOL)
+        if ok:
+            n_pass += 1
+            print(f"  [PASS] {view:5s}  #={n_both:4d}  +={n_extra}  dot={n_missing} "
+                  f"(<= {DIVERGENCE_TOL} edge-shimmer cells)")
+        else:
+            n_fail += 1
+            print(f"  [FAIL] {view:5s}  #={n_both}  +={n_extra}  dot={n_missing} "
+                  f"(self-diff divergence exceeds {DIVERGENCE_TOL} cells)")
+
+    # Also exercise the importable overlay_png path (render without error).
+    try:
+        paths = overlay_png(mesh, mesh, ws, views=("front",))
+        png_ok = len(paths) == 1 and Path(paths[0]).stat().st_size > 0
+        n_pass += int(png_ok); n_fail += int(not png_ok)
+        print(f"  [{'PASS' if png_ok else 'FAIL'}] overlay_png rendered "
+              f"({Path(paths[0]).stat().st_size // 1024} KB)" if png_ok
+              else "  [FAIL] overlay_png produced no file")
+    except Exception as e:  # noqa: BLE001
+        n_fail += 1
+        print(f"  [FAIL] overlay_png raised: {e!r}")
+
+    print("=" * 60)
+    print(f"Results: {n_pass} PASS, {n_fail} FAIL")
+    print("=" * 60)
+    if n_fail:
+        print("SELF-TEST FAILED")
+        return 1
+    print("ALL PERCEIVE SELF-TESTS PASSED")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="perceive.py — ASCII silhouette diff + overlay PNG of candidate vs GT"
     )
-    ap.add_argument("--cand", required=True,
+    ap.add_argument("--cand",
                     help=".py source, .step, or .stl path for the candidate")
-    ap.add_argument("--ref", required=True,
+    ap.add_argument("--ref",
                     help="task_id (e.g. bearing_608) or path to a reference .stl/.step")
     ap.add_argument("--ascii", action="store_true", help="produce ASCII silhouette diff")
     ap.add_argument("--png", action="store_true", help="produce overlay PNG(s)")
@@ -457,7 +524,14 @@ def main():
                     help="ASCII raster size WxH (default: 64x32)")
     ap.add_argument("--out", default=None,
                     help="output directory for PNGs (default: runs/_perceive_<pid>)")
+    ap.add_argument("--selftest", action="store_true",
+                    help="GT-free self-test: bearing-vs-itself ASCII diff (no task GT read)")
     args = ap.parse_args()
+
+    if args.selftest:
+        raise SystemExit(_selftest())
+    if not args.cand or not args.ref:
+        ap.error("--cand and --ref are required (unless --selftest)")
 
     # Parse grid
     try:

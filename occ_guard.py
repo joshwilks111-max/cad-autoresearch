@@ -268,3 +268,91 @@ def validate_solid(solid, label="final"):
             UserWarning,
             stacklevel=2,
         )
+
+
+# ---------------------------------------------------------------------------
+# Self-test  (python occ_guard.py [--selftest])
+# ---------------------------------------------------------------------------
+
+def _selftest() -> int:
+    """Exercise every guard on clean + degenerate geometry. Returns exit code."""
+    n_pass = n_fail = 0
+
+    def check(name, fn, expect_raise):
+        nonlocal n_pass, n_fail
+        try:
+            fn()
+            raised = None
+        except Exception as e:  # noqa: BLE001 - we want to see exactly what raised
+            raised = e
+        ok = (raised is not None) if expect_raise else (raised is None)
+        if ok:
+            n_pass += 1
+            tail = f" (raised: {raised})" if expect_raise and raised else ""
+            print(f"  [PASS] {name}{tail}")
+        else:
+            n_fail += 1
+            print(f"  [FAIL] {name}  expected {'raise' if expect_raise else 'no-raise'}, "
+                  f"got {raised!r}")
+
+    print("=" * 60)
+    print("occ_guard.py self-test")
+    print("=" * 60)
+
+    # 1. clean safe_cut: a box with a through-bore — must succeed
+    check("safe_cut clean (box - cylinder)",
+          lambda: safe_cut(Box(20, 20, 20), Cylinder(radius=5, height=30)),
+          expect_raise=False)
+
+    # 2. non-overlapping intersect -> empty -> raise
+    check("non-overlap intersect raises",
+          lambda: safe_intersect(Box(10, 10, 10),
+                                 Box(10, 10, 10).translate((100, 0, 0))),
+          expect_raise=True)
+
+    # 2b. non-overlapping cut leaves base intact -> must NOT raise
+    check("non-overlap cut no-raise (base unchanged)",
+          lambda: safe_cut(Box(20, 20, 20),
+                           Box(5, 5, 5).translate((100, 0, 0))),
+          expect_raise=False)
+
+    # 3a. revolve profile crossing the axis (x<0) -> raise
+    check("revolve axis-crossing raises",
+          lambda: check_revolve_profile([(0, 0), (10, 0), (10, 10), (-2, 10)]),
+          expect_raise=True)
+
+    # 3b. valid revolve profile (all x>=0) -> no raise
+    check("revolve valid profile no-raise",
+          lambda: check_revolve_profile([(0, 0), (10, 0), (10, 10), (0, 10)]),
+          expect_raise=False)
+
+    # 4. validate_solid on a clean box -> no raise
+    check("validate_solid clean box",
+          lambda: validate_solid(Box(20, 20, 20)),
+          expect_raise=False)
+
+    # 5. safe_fillet with a sane radius on a box edge -> no raise
+    def _fillet_good():
+        b = Box(20, 20, 20)
+        safe_fillet(b, b.edges(), 1.0)
+    check("safe_fillet sane radius no-raise", _fillet_good, expect_raise=False)
+
+    # 6. safe_fillet with an absurd radius (> half the box) -> raise
+    def _fillet_bad():
+        b = Box(20, 20, 20)
+        safe_fillet(b, b.edges(), 50.0)
+    check("safe_fillet absurd radius raises", _fillet_bad, expect_raise=True)
+
+    print("=" * 60)
+    print(f"Results: {n_pass} PASS, {n_fail} FAIL")
+    print("=" * 60)
+    if n_fail:
+        print("SELF-TEST FAILED")
+        return 1
+    print("ALL OCC_GUARD SELF-TESTS PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    raise SystemExit(_selftest())
