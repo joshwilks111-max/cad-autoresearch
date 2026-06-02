@@ -1,0 +1,21 @@
+[
+  {"query": "grade tasks/bearing_608/ground_truth/result.step against the bearing_608 task and tell me the composite and per-layer breakdown — does it count as solved?", "should_trigger": true},
+  {"query": "i have a STEP file from a colleague, score it against the reference for this part. how close is it geometrically?", "should_trigger": true},
+  {"query": "what's the fair way to grade a human-modelled STEP against an AI's build123d output so the comparison isn't rigged in the AI's favour?", "should_trigger": true},
+  {"query": "is this reconstruction actually correct? run the deterministic referee on my part.step and break down body/bbox/volume/iou/topology/chamfer", "should_trigger": true},
+  {"query": "score these two STEP files against each other — bring-your-own-reference, i want the per-layer deltas not just a single number", "should_trigger": true},
+  {"query": "run the time-trial referee on the human submission and the AI submission so I can compare them on equal footing", "should_trigger": true},
+  {"query": "my part imports as a STEP — how close is it to the target? give me the composite and tell me if >=0.95", "should_trigger": true},
+  {"query": "i need to certify that this exported STEP matches the registered ground truth, deterministically, with a layer breakdown", "should_trigger": true},
+
+  {"query": "read this drawing.png and pull the dimensions and hole callouts into a structured spec", "should_trigger": false},
+  {"query": "model the sample_bracket from its spec.md in build123d and write me the candidate.py", "should_trigger": false},
+  {"query": "the volume on my build123d part is too high, the hole isn't cutting — fix my candidate", "should_trigger": false},
+  {"query": "reconstruct this part to match the reference STEP and iterate until the score is above 0.95", "should_trigger": false},
+  {"query": "write a python script to compute the volume of an arbitrary STL mesh with numpy", "should_trigger": false},
+  {"query": "explain why high-face-count parts cap around 0.88 even with perfect geometry in this reward design", "should_trigger": false},
+  {"query": "convert my STEP file to a nicely-rendered PNG for a slide deck", "should_trigger": false},
+  {"query": "benchmark how long my python function takes to run across 1000 iterations", "should_trigger": false},
+  {"query": "grade my essay on thermodynamics and give me a mark out of 100", "should_trigger": false},
+  {"query": "extract the dimensions from this inch-spec title block note and convert everything to mm", "should_trigger": false}
+]

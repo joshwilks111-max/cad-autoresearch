@@ -1,0 +1,21 @@
+[
+  {"query": "model this part in build123d: a 80x50x8 plate, four Ø5 through-holes at the corners inset 10mm, and a 30x8 central slot. write the candidate.py defining result and grade it", "should_trigger": true},
+  {"query": "i have a written spec for the motor_mount (tasks/motor_mount/spec.md), reconstruct it as build123d on the spec track and tell me the composite", "should_trigger": true},
+  {"query": "reconstruct this part to match the reference STEP — i want a build123d program that reproduces the geometry and scores >=0.95", "should_trigger": true},
+  {"query": "my build123d volume keeps coming out too high on this plate-with-a-hole, the hole isn't subtracting. what's the correct candidate?", "should_trigger": true},
+  {"query": "run the cad autoresearch loop on sample_bracket — propose a candidate, grade it, read the feedback, iterate until it's solved", "should_trigger": true},
+  {"query": "i need to build the part shown in this spec.md as a parametric build123d model, defining a module-level result solid. it's a stepped cylindrical hub", "should_trigger": true},
+  {"query": "the topology score on my reconstruction is low because i'm missing the fillets — help me add them to the candidate without regressing the bbox", "should_trigger": true},
+  {"query": "match this STL: write build123d code that reproduces it, then grade against it and improve turn by turn", "should_trigger": true},
+
+  {"query": "read this drawing.png and extract the dimensions and hole callouts into a structured spec for me", "should_trigger": false},
+  {"query": "grade my finished STEP file against the bearing_608 task and give me the per-layer breakdown — is it solved?", "should_trigger": false},
+  {"query": "what's the fair way to score a human's STEP against an AI's build123d output so it isn't rigged?", "should_trigger": false},
+  {"query": "i have a 2D engineering print as an image, get every callout out of it before i build anything", "should_trigger": false},
+  {"query": "write a generic python function that meshes any build123d solid and exports a GLTF for the web", "should_trigger": false},
+  {"query": "explain how the IoU reward layer handles round parts vs prismatic ones in this harness", "should_trigger": false},
+  {"query": "design a logo for my CAD startup, something with calipers and a gear", "should_trigger": false},
+  {"query": "convert this folder of DXF files to SVG for laser cutting", "should_trigger": false},
+  {"query": "sculpt an organic vase mesh with a twisting fluted surface in blender-style", "should_trigger": false},
+  {"query": "score this STEP against a BYO reference STEP and tell me how close they are layer by layer", "should_trigger": false}
+]

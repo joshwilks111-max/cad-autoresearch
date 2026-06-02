@@ -1,0 +1,19 @@
+{
+  "skill_name": "cad-grade",
+  "evals": [
+    {
+      "id": 0,
+      "name": "grade-step-against-task-gt",
+      "prompt": "I'm in the cad-autoresearch repo. I have a part I want to check: grade tasks/bearing_608/ground_truth/result.step against the registered bearing_608 task and tell me how close it is — the composite and the per-layer breakdown, and whether it counts as solved.",
+      "expected_output": "Runs `python timetrial/grade_step.py --task bearing_608 --step tasks/bearing_608/ground_truth/result.step` (the right entrypoint), reports a composite near ~1.0 with per-layer scores, and correctly frames >=0.95 as solved (noting the ~0.97-0.99 self-grade ceiling). Does NOT edit reward.py.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "commensurability-awareness",
+      "prompt": "I want to compare a human-made STEP file to an AI's build123d output for the same part, scored fairly. What's the right way to grade the human's STEP so the comparison isn't rigged in the AI's favour? Walk me through it for our harness.",
+      "expected_output": "Explains the B-rep commensurability rule: grade the STEP through grade_step.py (import_step -> tessellate -> B-rep topology signature), NOT an ad-hoc mesh load with candidate_sig=None which collapses topology to a neutral 0.5 on the schema clash and silently favours the AI. Points at timetrial/grade_step.py.",
+      "files": []
+    }
+  ]
+}

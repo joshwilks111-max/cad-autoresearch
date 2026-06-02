@@ -1,0 +1,19 @@
+{
+  "skill_name": "cad-reconstruct",
+  "evals": [
+    {
+      "id": 0,
+      "name": "reconstruct-from-spec-offline",
+      "prompt": "I'm in the cad-autoresearch repo. Reconstruct the sample_bracket part from its spec on the spec track. Read tasks/sample_bracket/spec.md, write a build123d candidate that defines a module-level `result`, and grade it. Don't read anything under ground_truth/. Show me the score.",
+      "expected_output": "Writes a build123d program (candidate.py) defining `result`, runs grade_one.py (or the mock loop) to grade it, reports the composite + per-layer line, optimizes in the body->bbox->volume->iou->topology->chamfer order, and never reads ground_truth/. Aims for composite >= ~0.95.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "polarity-and-contract-discipline",
+      "prompt": "Here's a part to model in build123d: a 50x30x10mm plate with a single 12mm-diameter hole drilled all the way through the centre. The volume keeps coming out too high when I try it. What's wrong and what's the correct candidate?",
+      "expected_output": "Diagnoses the polarity error (a hole that should SUBTRACT material was added or not cut) and gives a correct candidate using Hole()/Mode.SUBTRACT, defining `result`, self-contained, mm. Explains volume catches polarity errors. Respects the candidate contract (no self-export/grade).",
+      "files": []
+    }
+  ]
+}

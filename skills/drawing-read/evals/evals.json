@@ -1,0 +1,19 @@
+{
+  "skill_name": "drawing-read",
+  "evals": [
+    {
+      "id": 0,
+      "name": "read-lbracket-drawing-to-spec",
+      "prompt": "I'm working in the cad-autoresearch repo. Read the engineering drawing at tasks/trial_lbracket/drawing.png and turn it into a structured geometry spec a modeller could build from without seeing the drawing. Give me the units, the views present, every dimension with what it measures, and the holes (count + diameter + cut/add). Write it as a JSON object.",
+      "expected_output": "A schema-shaped JSON spec: units=mm; views FRONT/TOP/RIGHT; the drawn dimensions (120 width, 44 height, 90 bolt-spacing, 36, 60 depth, 24 gusset, 8 thickness); features = 4x Ø8 base holes + 2x Ø8 wall holes, polarity cut. No invented GD&T/chamfer (not on the drawing).",
+      "files": ["tasks/trial_lbracket/drawing.png"]
+    },
+    {
+      "id": 1,
+      "name": "inch-drawing-unit-discipline",
+      "prompt": "Read this note from a drawing's title block: 'UNLESS OTHERWISE SPECIFIED, DIMENSIONS IN INCHES. Bore Ø0.25, plate 2.00 x 1.50, thickness 0.125.' Extract this into the standard structured spec for our CAD loop, with everything in millimetres. Show your work on the unit conversion.",
+      "expected_output": "A spec recording units as inches at source but every length normalized to mm (x25.4): bore Ø6.35, plate 50.8 x 38.1, thickness 3.175. The skill should make the inch->mm conversion explicit and not leave raw inch values in the mm fields.",
+      "files": []
+    }
+  ]
+}
