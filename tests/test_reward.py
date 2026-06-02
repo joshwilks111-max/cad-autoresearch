@@ -36,6 +36,30 @@ def test_body_gate_rejects_empty():
     assert r.composite == 0.0
 
 
+def test_body_gate_fail_returns_well_formed_result():
+    """Regression for the 2026-06-03 grid crash: the body-gate early-return
+    (reward.py `if not body_ok`) built RewardResult with a bare positional `raw`,
+    which (after siou became field #8) landed in the `siou` slot. That made siou a
+    dict, so summary()'s f"{siou:.3f}" raised TypeError and KILLED the worker — the
+    orchestrator then mislabelled the dead worker as "timeout after 120s". It also
+    silently dropped the `raw` diagnostics that feedback.py reads.
+
+    The existing test above only checks body/composite (the fields the bug does NOT
+    corrupt), so it never caught this. This asserts the corrupted fields:
+      - siou stays a float (not a dict),
+      - summary() renders without raising,
+      - raw carries the candidate_watertight flag feedback.py depends on.
+    Fails pre-fix (TypeError in summary / dict siou); passes post-fix."""
+    gt_mesh, gt_sig = _gt()
+    r = score(None, gt_mesh, gt_sig=gt_sig)          # None candidate -> body gate fails
+    assert isinstance(r.siou, float), f"siou must be a float, got {type(r.siou).__name__}"
+    assert r.siou == 0.0
+    assert isinstance(r.raw, dict) and r.raw.get("candidate_watertight") is False
+    # The actual crash site: this must not raise.
+    s = r.summary()
+    assert "siou=0.000" in s
+
+
 def test_identical_scores_high():
     gt_mesh, gt_sig = _gt()
     r = score(gt_mesh, gt_mesh, candidate_sig=gt_sig, gt_sig=gt_sig)
