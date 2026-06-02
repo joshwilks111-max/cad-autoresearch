@@ -503,6 +503,18 @@ def _backend_claude(png_path: str | Path) -> dict | None:
     exe = shutil.which("claude")
     if not exe:
         return None
+    # Keep this `claude` spawn on the subscription too (it's not on the orchestrator hot
+    # path, but "every place that spawns claude" must scrub the billing vars). Import the
+    # shared scrub lazily with a safe fallback so this module stays importable standalone.
+    try:
+        if str(_REPO) not in sys.path:
+            sys.path.insert(0, str(_REPO))
+        from loop.billing import subscription_env  # type: ignore
+        _child_env = subscription_env()
+    except Exception:  # noqa: BLE001
+        _child_env = {k: v for k, v in os.environ.items()
+                      if k.lower() not in ("anthropic_api_key", "anthropic_auth_token",
+                                           "anthropic_base_url")}
     # We pass the image by path in the prompt; the CLI reads local files.
     p = Path(png_path).resolve()
     prompt = (
@@ -516,6 +528,7 @@ def _backend_claude(png_path: str | Path) -> dict | None:
             text=True,
             encoding="utf-8",
             timeout=180,
+            env=_child_env,
         )
     except Exception:  # noqa: BLE001
         return None
