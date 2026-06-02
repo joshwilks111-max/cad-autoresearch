@@ -37,6 +37,20 @@ separately. This splits the old ceiling into two distinct cases:
   `surface_histogram.py`'s `count_ratio_similarity` (the eng review replaced the proposal's
   bare cosine with the scale-aware count-ratio blend per Risk H). Locked by
   `tests/test_topology_hybrid.py`.
+- **Two histogram caveats (review-noted, contained — don't chase):**
+  1. **Candidate/GT representation asymmetry (P3 TODO).** The GT histogram is computed from
+     the RE-IMPORTED STEP; the candidate histogram from the LIVE in-sandbox solid (before its
+     own round-trip). Surface TYPE is round-trip-stable so a perfect part reads ~1.0, but a
+     rare split-face round-trip (a periodic cylinder re-imported as two half-cylinders) could
+     score a perfect candidate marginally < 1.0 on `topology_hist`. The 0.5 exact half + the
+     other layers contain it. Fix only if a perfect part is ever observed with `topology_hist`
+     < 1.0: re-import the candidate's own `result.step` (the runner already writes it) before
+     computing its histogram. (`timetrial/grade_step.py` already re-imports both sides.)
+  2. **The histogram is computed in the candidate-controlled sandbox** (like `topology.json`
+     before it). A candidate COULD shadow `surface_histogram` and emit a fake histogram — but
+     this is the pre-existing "a candidate is arbitrary Python" trust model, not a new boundary,
+     and the mesh-derived layers (volume/IoU/chamfer) can't be faked without building the real
+     geometry. Same accepted property as the existing in-sandbox `topology.json`.
 
 ## 2. Round / annular parts: cylindrical IoU, not voxel IoU
 

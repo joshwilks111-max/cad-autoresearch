@@ -130,8 +130,12 @@ _SANDBOX_EPILOGUE = textwrap.dedent(
         # same reason topology.json is: OCP objects can't be pickled to the parent.
         # D5: PREFER the canonical surface_histogram module (single source of the
         # type-map + key list); fall back to an inline walk ONLY if the repo root
-        # isn't on the sandbox sys.path. tests/test_topology_hybrid.py asserts the
-        # inline fallback produces a byte-identical histogram to the module path.
+        # isn't on the sandbox sys.path. The inline _NAMES/_KEYS below MUST stay
+        # identical to surface_histogram._TYPE_NAMES / _CANONICAL_KEYS — they are a
+        # hand-maintained duplicate (the sandbox can't guarantee the import).
+        # tests/test_topology_hybrid.py::test_inline_fallback_matches_module forces
+        # the import to fail and asserts the inline walk == the module walk, so drift
+        # is caught. (The happy-path test exercises only the module path.)
         hist = None
         try:
             try:

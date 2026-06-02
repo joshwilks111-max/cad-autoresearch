@@ -13,14 +13,17 @@ accompany STEP round-trips: merging two seam edges into one doesn't change the
 face type of either neighbouring face. Yet the histogram remains discriminative:
 a missing hole = a missing Cylinder face -> cosine similarity drops.
 
-PROPOSED (not applied) reward integration note:
-  - Replace or supplement `topology_match` in reward.py Layer 4.
-  - Suggested weight: keep w_topology=0.15 but compute it as:
-      topo_s = 0.5 * topology_match(sig_c, sig_g) + 0.5 * histogram_similarity(hc, hg)
-  - Or swap entirely: topo_s = histogram_similarity(hc, hg) (drops kernel false
-    negatives at the cost of losing per-face-count discrimination for totally
-    wrong topologies). Hybrid is safer — exact counts still matter for simple parts.
-  - This module must be reviewed and integrated by a human before touching reward.py.
+SHIPPED reward integration (feat/reward-topology-hybrid):
+  - reward.py Layer 4 is now HYBRID:
+      topo_s = topo_exact_w * topology_match(sig_c, sig_g)
+             + (1 - topo_exact_w) * count_ratio_similarity(hc, hg)   (topo_exact_w=0.5)
+  - It uses `count_ratio_similarity` (scale-AWARE), NOT bare `histogram_similarity`
+    (cosine): cosine is scale-invariant and would over-reward an incomplete part
+    (Risk H). The count-ratio factor penalises missing faces. `histogram_similarity`
+    is retained below for the cosine A/B and is documented as unsafe-as-a-reward.
+  - w_topology is unchanged — the layer became more RELIABLE, not more important.
+  - Locked by tests/test_topology_hybrid.py; the histogram is computed in the runner
+    sandbox (OCP objects can't be pickled) and threaded into score() as a dict.
 """
 
 from __future__ import annotations
@@ -146,6 +149,17 @@ def count_ratio_similarity(hc: dict, hg: dict) -> float:
 
     Returns 0.0 when either histogram is empty (an empty solid is maximally wrong),
     matching ``histogram_similarity``'s zero-norm guard.
+
+    LAYER-LEVEL LIMITS (contained by the multi-layer composite, not by this function):
+      - SYMMETRIC in face count: a candidate with 2 EXTRA faces and one MISSING 2 faces
+        score the same min/max ratio. Over-completeness isn't penalised harder than
+        incompleteness here; volume/IoU catch spurious added material at the composite.
+      - SAME-HISTOGRAM-DIFFERENT-GEOMETRY: two parts with identical type-counts (a flat
+        washer vs an open tube, both {Plane:2,Cylinder:2}) score 1.0 here. The exact-count
+        half can also coincide; only volume/bbox/IoU/chamfer separate them. This is the
+        deliberate independent-layers design (a single layer's blind spot is covered by
+        the ensemble) — do NOT raise topo_exact_w to "fix" it; that narrows the margin on
+        exactly the feature-rich parts where adaptive_feature_weighting amplifies topology.
     """
     sum_c = sum(hc.values()) if hc else 0
     sum_g = sum(hg.values()) if hg else 0

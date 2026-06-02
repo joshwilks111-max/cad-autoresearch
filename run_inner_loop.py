@@ -60,17 +60,24 @@ _GT_HIST_CACHE: dict[tuple, dict | None] = {}
 def _gt_histogram(gt_step: Path) -> dict | None:
     """Surface-type histogram of a GT STEP, signed from the RE-IMPORTED solid
     (the seam-merge lesson: the histogram must come from the same representation
-    the grader compares against). Cached by (path, size, mtime). Returns None if
+    the grader compares against). Cached by (path, size, mtime_ns). Returns None if
     the STEP is missing or the tool/import is unavailable — the grader then falls
-    back to exact-count topology, so a missing histogram degrades gracefully."""
+    back to exact-count topology, so a missing histogram degrades gracefully.
+
+    Cache discipline (review-hardened): the key uses st_mtime_ns (nanosecond, not
+    int-second) so a GT regenerated within the same wall-clock second cannot serve a
+    stale histogram. A SUCCESSFUL result is cached; a FAILED one (None) is NOT cached,
+    so a transient import/OCP hiccup on one grade doesn't permanently downgrade the
+    hybrid layer to exact-only for the rest of a long grid run (the silent-corruption
+    path two adversarial reviewers flagged)."""
     if not gt_step.exists():
         return None
     try:
         st = gt_step.stat()
-        key = (str(gt_step), st.st_size, int(st.st_mtime))
+        key = (str(gt_step), st.st_size, st.st_mtime_ns)
     except OSError:
-        key = (str(gt_step), -1, -1)
-    if key in _GT_HIST_CACHE:
+        key = None                  # can't form a stable key -> don't cache, just compute
+    if key is not None and key in _GT_HIST_CACHE:
         return _GT_HIST_CACHE[key]
     hist = None
     try:
@@ -78,7 +85,10 @@ def _gt_histogram(gt_step: Path) -> dict | None:
         hist = surface_histogram(from_step(str(gt_step)))
     except Exception:
         hist = None
-    _GT_HIST_CACHE[key] = hist      # cache None too — don't re-import a failing STEP per grade
+    # Cache only successes. A transient failure must be retried next grade, not
+    # permanently pinned to None for the process lifetime.
+    if key is not None and hist is not None:
+        _GT_HIST_CACHE[key] = hist
     return hist
 
 

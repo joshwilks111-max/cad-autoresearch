@@ -227,11 +227,22 @@ def score(candidate_mesh: trimesh.Trimesh,
     # be auditable, never a silent default), even on the exact-only fallback.
     exact_topo = G.topology_match(sig_c, sig_g)
     raw["topology_exact"] = exact_topo
-    if _hist_sim is not None and candidate_hist and gt_hist:
-        hist_topo = _hist_sim(candidate_hist, gt_hist)
+    # The hybrid fires iff the histogram tool is importable AND a usable GT histogram
+    # exists (a GT with at least one classified face — the reference to compare against).
+    # The CANDIDATE histogram is deliberately NOT part of the gate: an empty/all-zero
+    # candidate histogram is a REAL signal (degenerate/featureless solid) that must score
+    # the histogram half LOW, not silently skip to exact-only. Without this, `{}` (falsy)
+    # would skip the hybrid while `{Plane:0}` (truthy, sums to 0) would tank it to 0 — the
+    # same physical situation scored oppositely depending on representation. We normalise:
+    # a None candidate hist becomes {} (count_ratio_similarity returns 0.0 either way).
+    def _has_face(h) -> bool:
+        return bool(h) and sum(h.values()) > 0
+    if _hist_sim is not None and _has_face(gt_hist):
+        hist_topo = _hist_sim(candidate_hist or {}, gt_hist)
         raw["topology_hist"] = hist_topo
         topo_s = cfg.topo_exact_w * exact_topo + (1.0 - cfg.topo_exact_w) * hist_topo
     else:
+        # No histogram tool, or no usable GT reference -> exact-only (pre-hybrid path).
         raw["topology_hist"] = None
         topo_s = exact_topo
     raw["topology_candidate"], raw["topology_gt"] = sig_c, sig_g

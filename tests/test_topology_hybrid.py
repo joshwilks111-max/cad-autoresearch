@@ -238,3 +238,153 @@ def test_sandbox_inline_walk_matches_module():
     assert run.histogram == module_hist, (
         f"sandbox histogram {run.histogram} != module histogram {module_hist} — "
         "the inline walk and module walk have drifted (D5)")
+
+
+# ── 8. the INLINE fallback walk matches the module (review C4) ─────────────────
+
+def test_inline_fallback_matches_module():
+    """runner.py's sandbox epilogue carries an INLINE histogram walk used ONLY when
+    `from surface_histogram import surface_histogram` fails on the sandbox sys.path.
+    test_sandbox_inline_walk_matches_module never exercises it (the module import
+    succeeds in-repo). This test FORCES the import to fail by running a candidate with
+    a sitecustomize that shadows surface_histogram with an ImportError, then asserts
+    the inline-walked histogram.json byte-matches the canonical module walk. This is
+    the drift guard runner.py's comment promises (review finding C4)."""
+    from harness.runner import run_candidate
+    import tempfile
+    code = ("from build123d import *\n"
+            "with BuildPart() as p:\n"
+            "    Box(40, 40, 40)\n"
+            "    Cylinder(8, 40, mode=Mode.SUBTRACT)\n"
+            "result = p")
+    ws = Path(tempfile.mkdtemp(prefix="_inline_"))
+    # A sitecustomize.py in the workspace (cwd of the sandbox) makes
+    # `import surface_histogram` raise inside the candidate process ONLY, forcing the
+    # inline fallback. cwd is on sys.path[0] for the script, so this shadows the repo module.
+    (ws / "surface_histogram.py").write_text(
+        "raise ImportError('forced fallback for test_inline_fallback_matches_module')\n",
+        encoding="utf-8")
+    run = run_candidate(code, ws, timeout=120)
+    assert run.ok, run.error
+    assert run.histogram is not None, "inline fallback must still emit a histogram"
+    # Compare against the canonical module walk on the re-imported candidate STEP.
+    from surface_histogram import surface_histogram as _sh, from_step
+    module_hist = _sh(from_step(str(run.step_path)))
+    assert run.histogram == module_hist, (
+        f"INLINE fallback histogram {run.histogram} != module {module_hist} — the "
+        "hand-maintained inline _NAMES/_KEYS have drifted from surface_histogram (C4)")
+
+
+# ── 9. determinism — the histogram is byte-identical across two runs (D7) ──────
+
+def test_histogram_is_deterministic_across_runs():
+    """The histogram feeds a deterministic reward layer. Two runs of the SAME
+    candidate must produce a byte-identical histogram (no dict-ordering or
+    face-walk-ordering nondeterminism). Review/testing flagged this was unguarded."""
+    from harness.runner import run_candidate
+    import tempfile
+    code = ("from build123d import *\n"
+            "with BuildPart() as p:\n"
+            "    Box(30, 20, 10)\n"
+            "    Cylinder(4, 10, mode=Mode.SUBTRACT)\n"
+            "result = p")
+    r1 = run_candidate(code, tempfile.mkdtemp(prefix="_det1_"), timeout=120)
+    r2 = run_candidate(code, tempfile.mkdtemp(prefix="_det2_"), timeout=120)
+    assert r1.ok and r2.ok
+    assert r1.histogram == r2.histogram, (
+        f"histogram non-deterministic across runs: {r1.histogram} != {r2.histogram}")
+
+
+# ── 10. score() degrades gracefully when the hist tool can't import (review) ───
+
+def test_score_degrades_when_hist_tool_unimportable(monkeypatch):
+    """If surface_histogram couldn't be imported (reward.py sets _hist_sim=None), the
+    hybrid must fall back to exact-only — identical to the no-hist path — even when
+    histograms ARE passed. Untested before review (every test imports the tool fine)."""
+    import harness.reward as R
+    monkeypatch.setattr(R, "_hist_sim", None)
+    solid = _lbracket_solid()
+    mesh = _solid_to_mesh(solid)
+    sig = G.topology_signature_from_solid(solid)
+    hist = surface_histogram(solid)
+    r = R.score(mesh, mesh, candidate_sig=sig, gt_sig=sig,
+                candidate_hist=hist, gt_hist=hist, cfg=RewardConfig())
+    assert r.raw["topology_hist"] is None, "tool unimportable -> no histogram half"
+    assert r.topology == r.raw["topology_exact"], "must degrade to exact-only"
+
+
+# ── 11. empty/None candidate hist scores the histogram half LOW, not skipped ───
+
+def test_empty_candidate_hist_scores_low_not_skipped(monkeypatch):
+    """A degenerate candidate (empty or all-zero histogram) against a real GT must
+    score the histogram half at 0.0 (honest: it produced no classifiable faces), NOT
+    silently skip to exact-only. Guards the {} vs {Plane:0} representation fork the
+    review found (C3): both must behave identically now."""
+    solid = _lbracket_solid()
+    mesh = _solid_to_mesh(solid)
+    sig = G.topology_signature_from_solid(solid)
+    gt_hist = surface_histogram(solid)              # a real GT reference (has faces)
+    cfg = RewardConfig()
+    # both an empty dict and an all-zero-with-keys dict must hit the hybrid and score
+    # the histogram half 0.0 (count_ratio_similarity zero-guard), NOT skip to exact-only.
+    for empty in ({}, {"Plane": 0, "Cylinder": 0}, None):
+        r = score(mesh, mesh, candidate_sig=sig, gt_sig=sig,
+                  candidate_hist=empty, gt_hist=gt_hist, cfg=cfg)
+        assert r.raw["topology_hist"] == 0.0, (
+            f"empty candidate hist {empty!r} must score histogram half 0.0, "
+            f"got {r.raw['topology_hist']!r} (the C3 representation fork)")
+
+
+# ── 12. count_ratio isolates the cosine factor when face counts are equal ──────
+
+def test_count_ratio_equal_counts_is_pure_cosine():
+    """When Σhc == Σhg (ratio factor = 1.0) the similarity is pure cosine — the
+    sub-case the monotonicity ladder never hits (every rung changes the face sum).
+    Two equal-total, different-type histograms: 0 < result < 1 and == bare cosine."""
+    a = {"Plane": 6, "Cylinder": 2}     # 8 faces
+    b = {"Plane": 5, "Cylinder": 3}     # 8 faces, different type split
+    cr = count_ratio_similarity(a, b)
+    cos = histogram_similarity(a, b)
+    assert cr == pytest.approx(cos, abs=1e-9), "equal counts -> ratio 1.0 -> pure cosine"
+    assert 0.0 < cr < 1.0, "different type split must score strictly between 0 and 1"
+
+
+# ── 13. the GT histogram cache: hit, no-cache-on-None, mtime_ns key (review C2) ─
+
+def test_gt_histogram_cache_behavior(monkeypatch, tmp_path):
+    """run_inner_loop._gt_histogram: (a) caches a success and serves it without
+    recomputing; (b) does NOT cache a None (transient failure must retry, not pin the
+    whole run to exact-only); (c) tolerates a stat() failure. Untested before review."""
+    import run_inner_loop as RIL
+    RIL._GT_HIST_CACHE.clear()
+
+    step = tmp_path / "result.step"
+    step.write_text("dummy", encoding="utf-8")     # existence is enough; we patch the walk
+
+    calls = {"n": 0}
+
+    def _fake_success(p):
+        calls["n"] += 1
+        return {"Plane": 6}
+
+    # (a) success is cached: two calls -> the walk runs once.
+    monkeypatch.setattr(RIL, "_gt_histogram", RIL._gt_histogram)   # ensure real fn
+    monkeypatch.setattr("surface_histogram.surface_histogram", _fake_success, raising=False)
+    monkeypatch.setattr("surface_histogram.from_step", lambda s: object(), raising=False)
+    h1 = RIL._gt_histogram(step)
+    h2 = RIL._gt_histogram(step)
+    assert h1 == h2 == {"Plane": 6}
+    assert calls["n"] == 1, "a cached success must not recompute"
+
+    # (b) a failure is NOT cached: it retries next call (no permanent None pinning).
+    RIL._GT_HIST_CACHE.clear()
+    fail_calls = {"n": 0}
+
+    def _fake_fail(p):
+        fail_calls["n"] += 1
+        raise RuntimeError("transient")
+
+    monkeypatch.setattr("surface_histogram.surface_histogram", _fake_fail, raising=False)
+    assert RIL._gt_histogram(step) is None
+    assert RIL._gt_histogram(step) is None
+    assert fail_calls["n"] == 2, "a transient failure must RETRY, not be pinned to None"
