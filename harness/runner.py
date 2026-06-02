@@ -190,7 +190,14 @@ class RunResult:
 def run_candidate(code: str, workspace: str | Path, timeout: int = 120,
                   python: str | None = None) -> RunResult:
     """Run `code` in `workspace`; return artifacts + a loaded mesh."""
-    ws = Path(workspace)
+    # Resolve to ABSOLUTE before building the script path. The subprocess below
+    # runs with cwd=ws; if `workspace` is relative (e.g. orchestrator/--run-dir
+    # passes "runs/foo/w0/attempt_001"), then `str(script)` stays relative too and
+    # the OS re-resolves it against the new cwd -> a DOUBLED path
+    # (runs/foo/.../runs/foo/.../candidate.py) -> "can't open file" -> the candidate
+    # never runs and is graded body=0. Resolving here makes `script` absolute so the
+    # cwd change is harmless. (Production grids hit exactly this with relative run dirs.)
+    ws = Path(workspace).resolve()
     ws.mkdir(parents=True, exist_ok=True)
     script = ws / "candidate.py"
     # UTF-8 explicitly: on Windows write_text defaults to cp1252, so any non-ASCII

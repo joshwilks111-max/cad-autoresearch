@@ -191,3 +191,30 @@ def test_runner_builds_and_grades_monotonic():
     assert s3.composite > s1.composite
     assert s3.topology == 1.0        # full part matches GT topology exactly
     assert s3.composite > 0.9
+
+
+def test_runner_relative_workspace_does_not_double_path():
+    """Regression for the 2026-06-03 grid zeroing: run_candidate ran the subprocess
+    with cwd=workspace but passed a still-RELATIVE script path, so the OS re-resolved
+    it against the new cwd -> a doubled path (runs/x/.../runs/x/.../candidate.py) ->
+    "can't open file" -> candidate exited 2 -> graded body=0. With the orchestrator and
+    --run-dir both passing relative run dirs, this zeroed EVERY worker's build.
+
+    The existing runner test above only ever used an ABSOLUTE workspace (REPO/...), so
+    it never caught this. This passes a RELATIVE workspace — the exact production
+    condition. Fails pre-fix (r.ok False, 'exited 2'); passes post-fix (ws.resolve()).
+
+    cwd is changed to REPO so the relative path is well-defined, then restored."""
+    import os
+    code = ("from build123d import *\n"
+            "with BuildPart() as p:\n    Box(10, 10, 10)\n"
+            "result = p")
+    rel_ws = os.path.join("runs", "_pytest_relws", "ws")
+    prev = os.getcwd()
+    try:
+        os.chdir(str(REPO))
+        r = run_candidate(code, rel_ws, timeout=120)
+    finally:
+        os.chdir(prev)
+    assert r.ok, f"relative workspace must build, not double the path; error={r.error!r}"
+    assert r.error is None
