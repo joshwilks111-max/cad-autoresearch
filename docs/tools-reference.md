@@ -27,16 +27,21 @@ GT geometry**. They are for **grader-side / interactive use only**. Never paste 
 into a worker's spec, feedback report, or a drawing-track prompt — doing so hands the agent
 the answer and invalidates the run.
 
-| Tool | GT-leaking? | Why |
-|------|-------------|-----|
-| `preflight.py`        | **Safe (candidate-only)** | Inspects the candidate alone; no reference. |
-| `occ_guard.py`        | **Safe (candidate-only)** | Build-time guardrails; no reference. |
-| `unit_normalize.py`   | **Safe (candidate-only)** | Pure data transform; no geometry. |
-| `drawing_extract.py`  | **Safe (candidate-only)** | Reads the *given* drawing (an input), not GT. |
-| `regiondiff.py`       | **GT-LEAKING**            | Signed cell/band/hole diff vs the reference. |
-| `perceive.py`         | **GT-LEAKING**            | Silhouette/overlay diff vs the reference. |
-| `hole_metrics.py`     | Safe candidate-only / **GT-leaking with `--ref`-style use** | Safe on a candidate alone; leaking if you run it on the GT mesh and feed counts back. |
-| `surface_histogram.py`| Safe candidate-only / **GT-leaking with the GT histogram** | Safe on a candidate alone; `histogram_similarity(hc, hg)` against a GT histogram leaks. |
+The **Verdict** column is a keep/retire call (`core` = load-bearing, keep; `optional` =
+useful but niche; `retire` = superseded — none currently). It is the Software-3.0
+"Foxconn audit": each tool earns its place or gets a flag. Verdicts reflect the dogfood
+findings (see `research-and-deferred.md` + the project memory updates).
+
+| Tool | Verdict | GT-leaking? | Why |
+|------|---------|-------------|-----|
+| `preflight.py`        | **core**     | **Safe (candidate-only)** | Sub-3s build+sanity gate — the authoring workbench's front door; no reference. |
+| `occ_guard.py`        | **core**     | **Safe (candidate-only)** | Guards the real OCC silent-empty/fragment boolean traps; no reference. |
+| `unit_normalize.py`   | **core**     | **Safe (candidate-only)** | Makes the recurring inch→mm bug architecturally impossible. Pure data transform. |
+| `drawing_extract.py`  | **core**     | **Safe (candidate-only)** | The `drawing-read` pack's engine. Reads the *given* drawing (an input), not GT. |
+| `regiondiff.py`       | **core**     | **GT-LEAKING**            | The dogfood-proven "where am I wrong" tool — signed cell/band/hole diff vs the reference. |
+| `perceive.py`         | **optional** | **GT-LEAKING**            | Silhouette/overlay diff vs the reference; handy for VLM overlays, ASCII path is niche. |
+| `hole_metrics.py`     | **optional** | Safe candidate-only / **GT-leaking with `--ref`-style use** | Through-vs-blind discriminator; has a known thin-feature residual, and `surface_histogram` covers more topology. Safe alone; leaking if run on the GT mesh and fed back. |
+| `surface_histogram.py`| **core**     | Safe candidate-only / **GT-leaking with the GT histogram** | Kernel-stable surface-type topology — the one with a pending `reward.py` integration. Safe alone; `histogram_similarity(hc, hg)` against a GT histogram leaks. |
 
 ---
 

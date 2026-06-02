@@ -1,14 +1,21 @@
 ---
-name: cad-iteration
-description: Reconstruct a mechanical part as a build123d program and iterate it against a deterministic geometric grader. Use when given a part to model from a written geometry spec or a 2D engineering drawing, when asked to match/reproduce a reference STEP/STL, or when running the CAD autoresearch loop (propose a build123d candidate, grade it on volume/bbox/IoU/topology/Chamfer, read the feedback, revise). Triggers on "model this part", "reproduce this drawing in CAD", "build123d", "match this STEP", or working inside a cad-autoresearch repo. Do not use for freeform generative/artistic 3D, mesh sculpting, or CAM/toolpathing.
+name: cad-reconstruct
+description: Reconstruct a mechanical part as a build123d program and iterate it against a deterministic geometric grader (the propose → build → grade → revise loop). Use when given a written geometry spec to model, when asked to match/reproduce a reference STEP/STL, or when running the CAD autoresearch loop (propose a build123d candidate, grade it on volume/bbox/IoU/topology/Chamfer, read the feedback, revise). Triggers on "model this part", "build123d", "match this STEP", "reconstruct this part", or working inside a cad-autoresearch repo. If the input is a 2D drawing image, read it into a spec first with the drawing-read skill, then use this. To score a finished STEP against a reference, use the cad-grade skill. Do not use for freeform generative/artistic 3D, mesh sculpting, or CAM/toolpathing.
 ---
 
-# CAD iteration
+# CAD reconstruct
 
 Model a target part as a **build123d** program, graded by a deterministic
-six-layer reward against hidden ground truth, and iterate on the score. This skill
-is the worker-side discipline for the `cad-autoresearch` harness; if that repo is
-present, its `program.md` is the authoritative manual — read it first.
+multi-layer reward against hidden ground truth, and iterate on the score. This is
+the modelling loop of the `cad-autoresearch` harness; if that repo is present, its
+`program.md` is the authoritative manual — read it first.
+
+This pack is one of three that compose into the AI-to-CAD pipeline
+(`drawing-read → cad-reconstruct → cad-grade`, see `docs/skills.md`). It owns the
+**spec → model** step. Reading a drawing into a spec is a *different* skill
+(`drawing-read`); scoring a finished STEP against a reference is a *different* skill
+(`cad-grade`). Keeping them separate is deliberate — a modelling slip must not
+corrupt how the drawing was read, and the grader must stay independent of the modeller.
 
 ## The loop
 Propose → execute → evaluate → keep/discard. Each turn: read the spec/drawing and
@@ -33,18 +40,18 @@ and the rendered views, and change one clear thing.
 6. **chamfer** — refine exact radii and feature positions.
 Don't polish fillets while the bounding box is still wrong.
 
-## Two tracks
-- **spec track**: translate a written spec → build123d. Pure execution; aim for
-  composite ≥ ~0.95.
-- **drawing track**: you get only an image. Read it FIRST — extract every
-  dimension, feature, and GD&T callout into an explicit spec before modelling.
-  Reading the drawing is a separate skill from modelling; isolate it (a vision
-  subagent) so a modelling slip doesn't corrupt your reading of the print.
+## Input is a spec, not a drawing
+This pack models from a **written spec**. If you were handed a 2D drawing image,
+that is the `drawing-read` pack's job: run it first to extract every dimension,
+feature, and GD&T callout into an explicit spec (with units normalized to mm),
+then model from that spec here. Don't read the raster and model in the same breath
+— a modelling slip would then masquerade as a misread print.
 
 ## Decompose when it helps
-Spawn a vision subagent to read a drawing, or a debugger subagent to fix a build
-failure (empty selector, wrong boolean mode, fillet radius too large, inch↔mm
-scale). Always converge back to a single `candidate.py`.
+Spawn a debugger subagent to fix a build failure (empty selector, wrong boolean
+mode, fillet radius too large). For drawing-reading specifically, delegate to the
+`drawing-read` pack rather than reading inline. Always converge back to a single
+`candidate.py`.
 
 ## build123d essentials
 ```python
