@@ -38,6 +38,8 @@ from pathlib import Path
 
 import yaml
 
+from loop.billing import print_billing_banner
+
 REPO = Path(__file__).resolve().parent
 
 
@@ -185,6 +187,7 @@ def main():
 
     print(f"== orchestrator: {len(jobs)} workers "
           f"({args.workers}/task x {len(args.tasks)} tasks) backend={args.backend} ==")
+    print_billing_banner()   # once per launch — which plane (subscription) is active
     if args.backend == "tmux":
         launch_tmux(args.session, jobs, args.dry_run)
     else:

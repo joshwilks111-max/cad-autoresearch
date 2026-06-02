@@ -24,6 +24,8 @@ import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .billing import subscription_env
+
 
 @dataclass
 class Candidate:
@@ -85,7 +87,12 @@ class ClaudeCodeProposer:
     The CLI is pointed at the repo (so it can read program.md, the harness, and
     the task files) and given the latest feedback. We ask it to WRITE the next
     candidate to a known path and echo a sentinel; we then read that file back.
-    Requires the Claude Code CLI on PATH and an API key in the environment."""
+
+    Requires the Claude Code CLI on PATH, signed in to a plan (`claude login`). NO
+    API key is needed: `claude -p` bills the subscription via OAuth. We deliberately
+    spawn it with ANTHROPIC_API_KEY removed from the child env (see
+    `subscription_env`) — if that var is set, the CLI prefers it and would silently
+    bill the metered API, which is exactly what this loop must never do."""
     name = "claude"
 
     def __init__(self, repo_dir: str | Path, model: str = "opus",
@@ -127,8 +134,11 @@ class ClaudeCodeProposer:
                "--permission-mode", "acceptEdits",
                "--allowedTools", self.allowed_tools]
         try:
+            # env scrub: drop ANTHROPIC_API_KEY so `claude -p` bills the subscription
+            # (OAuth) and never the metered API. See loop/billing.py.
             proc = subprocess.run(cmd, cwd=str(self.repo_dir), capture_output=True,
-                                  text=True, timeout=self.turn_timeout)
+                                  text=True, timeout=self.turn_timeout,
+                                  env=subscription_env())
         except subprocess.TimeoutExpired:
             return Candidate(code="", meta={"error": "cli_timeout"})
 

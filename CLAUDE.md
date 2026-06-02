@@ -57,6 +57,14 @@ themselves.
   `python orchestrator.py --proposer claude --workers 4`  then  `python watcher.py`
 - Tests: `pytest -q`  (build the sample GT first via setup.sh)
 
+**Billing plane.** `--proposer claude` drives the **`claude` CLI in `-p` (print) mode**, which
+bills your **subscription via OAuth** — there is no `anthropic.Anthropic()` client in this repo,
+so the orchestrator is NOT metered-API work. The one caveat: `claude -p` *prefers*
+`ANTHROPIC_API_KEY` if it's set in the env, which would silently bill the API instead. The loop
+**scrubs that var in-process** at the two `claude`-spawn seams (`loop/policies.py`, `watcher.py`)
+and the launcher prints which plane is active. Rule: keep `ANTHROPIC_API_KEY` unset; don't set it
+to "enable" runs — it does the opposite of what you want.
+
 ## Guardrails (do not violate)
 - **Never read anything under any `ground_truth/` directory.** It is the hidden
   answer key; the harness loads it, agents must not.
