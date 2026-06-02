@@ -91,7 +91,18 @@ def _load_task_gt(task_id: str, as_json: bool):
             gt_sig = json.loads(gt_topo.read_text())
         except Exception:
             gt_sig = None
-    return gt_mesh, gt_sig
+    # Hybrid Layer-4: GT surface histogram from the RE-IMPORTED STEP (seam-merge
+    # lesson — same representation the grader compares against). None on any
+    # failure -> exact-count fallback in score().
+    gt_hist = None
+    gt_step = gt_dir / "result.step"
+    if gt_step.exists():
+        try:
+            from surface_histogram import surface_histogram, from_step
+            gt_hist = surface_histogram(from_step(str(gt_step)))
+        except Exception:
+            gt_hist = None
+    return gt_mesh, gt_sig, gt_hist
 
 
 def _step_to_mesh_and_sig(step_path: Path, label: str, as_json: bool):
@@ -119,6 +130,14 @@ def _step_to_mesh_and_sig(step_path: Path, label: str, as_json: bool):
              "failed) — grading would fall back to the mesh proxy and be "
              "non-commensurable with B-rep ground truth",
              "re-export a closed B-rep SOLID, not a surface model", as_json)
+    # Hybrid Layer-4 histogram from the already-imported solid (this STEP was just
+    # import_step'd, so it IS the re-imported representation — commensurable with
+    # the GT histogram, also computed from a re-imported STEP). None -> exact-only.
+    try:
+        from surface_histogram import surface_histogram
+        hist = surface_histogram(solid)
+    except Exception:
+        hist = None
     # tessellate to a trimesh at the pinned tolerance
     ws = Path(tempfile.mkdtemp(prefix="grade_step_"))
     stl = ws / "out.stl"
@@ -132,7 +151,7 @@ def _step_to_mesh_and_sig(step_path: Path, label: str, as_json: bool):
         _err(4, f"{label} STEP produced an empty mesh",
              "no faces after tessellation — likely not a valid closed solid",
              "re-export a watertight solid", as_json)
-    return mesh, sig, bool(getattr(mesh, "is_watertight", False))
+    return mesh, sig, hist, bool(getattr(mesh, "is_watertight", False))
 
 
 def main():
@@ -154,16 +173,18 @@ def main():
 
     # reference side
     if args.task:
-        gt_mesh, gt_sig = _load_task_gt(args.task, as_json)
+        gt_mesh, gt_sig, gt_hist = _load_task_gt(args.task, as_json)
         ref_label = f"task:{args.task}"
     else:
-        gt_mesh, gt_sig, _ = _step_to_mesh_and_sig(Path(args.ref), "reference", as_json)
+        gt_mesh, gt_sig, gt_hist, _ = _step_to_mesh_and_sig(Path(args.ref), "reference", as_json)
         ref_label = f"ref:{Path(args.ref).name}"
 
     # candidate side (the STEP being graded)
-    cand_mesh, cand_sig, watertight = _step_to_mesh_and_sig(Path(args.step), "candidate", as_json)
+    cand_mesh, cand_sig, cand_hist, watertight = _step_to_mesh_and_sig(
+        Path(args.step), "candidate", as_json)
 
-    rw = score(cand_mesh, gt_mesh, candidate_sig=cand_sig, gt_sig=gt_sig, cfg=RewardConfig())
+    rw = score(cand_mesh, gt_mesh, candidate_sig=cand_sig, gt_sig=gt_sig,
+               candidate_hist=cand_hist, gt_hist=gt_hist, cfg=RewardConfig())
 
     out = {
         "ok": True,
@@ -172,6 +193,10 @@ def main():
         "composite": rw.composite,
         "body": rw.body, "volume": rw.volume, "bbox": rw.bbox,
         "topology": rw.topology, "iou": rw.iou, "chamfer": rw.chamfer, "siou": rw.siou,
+        # Hybrid Layer-4 sub-scores (Risk-H: the blend is auditable, never silent).
+        # topology_hist is None when the histograms weren't available (exact-only path).
+        "topology_exact": rw.raw.get("topology_exact"),
+        "topology_hist": rw.raw.get("topology_hist"),
         "watertight": watertight,
         "tessellation_tolerance": TESSELLATION_TOLERANCE,
     }
@@ -182,6 +207,11 @@ def main():
         print(f"  body {rw.body:.0f}  volume {rw.volume:.3f}  bbox {rw.bbox:.3f}  "
               f"topo {rw.topology:.3f}  iou {rw.iou:.3f}  cham {rw.chamfer:.3f}  "
               f"siou {rw.siou:.3f}")
+        # Hybrid Layer-4 breakdown so the topology blend is visible at the referee too.
+        _te, _th = rw.raw.get("topology_exact"), rw.raw.get("topology_hist")
+        if _te is not None:
+            _th_s = f"{_th:.3f}" if _th is not None else "n/a (exact-only)"
+            print(f"    topo breakdown: exact {_te:.3f}  hist {_th_s}")
         if not watertight:
             print("  WARNING: candidate STEP is NOT watertight — the score may be "
                   "unreliable (heal the solid in CAD).", file=sys.stderr)

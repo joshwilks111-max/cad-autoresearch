@@ -49,6 +49,49 @@ def load_task(task_id: str) -> dict:
     raise SystemExit(f"task '{task_id}' not in tasks/manifest.yaml")
 
 
+# GT surface-histogram cache for the hybrid Layer-4. Keyed by the GT STEP's
+# (path, size, mtime) — NOT the bare task_id — so a regenerated ground truth
+# invalidates the cache instead of serving a stale histogram (the content-hash
+# lesson). Lazy: computed once per GT, reused across every grade in a grid run so
+# the orchestrator doesn't re-import the same ~10 GT STEPs thousands of times.
+_GT_HIST_CACHE: dict[tuple, dict | None] = {}
+
+
+def _gt_histogram(gt_step: Path) -> dict | None:
+    """Surface-type histogram of a GT STEP, signed from the RE-IMPORTED solid
+    (the seam-merge lesson: the histogram must come from the same representation
+    the grader compares against). Cached by (path, size, mtime_ns). Returns None if
+    the STEP is missing or the tool/import is unavailable — the grader then falls
+    back to exact-count topology, so a missing histogram degrades gracefully.
+
+    Cache discipline (review-hardened): the key uses st_mtime_ns (nanosecond, not
+    int-second) so a GT regenerated within the same wall-clock second cannot serve a
+    stale histogram. A SUCCESSFUL result is cached; a FAILED one (None) is NOT cached,
+    so a transient import/OCP hiccup on one grade doesn't permanently downgrade the
+    hybrid layer to exact-only for the rest of a long grid run (the silent-corruption
+    path two adversarial reviewers flagged)."""
+    if not gt_step.exists():
+        return None
+    try:
+        st = gt_step.stat()
+        key = (str(gt_step), st.st_size, st.st_mtime_ns)
+    except OSError:
+        key = None                  # can't form a stable key -> don't cache, just compute
+    if key is not None and key in _GT_HIST_CACHE:
+        return _GT_HIST_CACHE[key]
+    hist = None
+    try:
+        from surface_histogram import surface_histogram, from_step
+        hist = surface_histogram(from_step(str(gt_step)))
+    except Exception:
+        hist = None
+    # Cache only successes. A transient failure must be retried next grade, not
+    # permanently pinned to None for the process lifetime.
+    if key is not None and hist is not None:
+        _GT_HIST_CACHE[key] = hist
+    return hist
+
+
 def load_ground_truth(task: dict):
     gt_dir = task["_dir"] / "ground_truth"
     stl = gt_dir / "result.stl"
@@ -63,7 +106,8 @@ def load_ground_truth(task: dict):
             sig = json.loads((gt_dir / "topology.json").read_text())
         except Exception:
             sig = None
-    return mesh, sig
+    gt_hist = _gt_histogram(gt_dir / "result.step")
+    return mesh, sig, gt_hist
 
 
 def main():
@@ -82,7 +126,7 @@ def main():
     args = ap.parse_args()
 
     task = load_task(args.task)
-    gt_mesh, gt_sig = load_ground_truth(task)
+    gt_mesh, gt_sig, gt_hist = load_ground_truth(task)
 
     run_dir = Path(args.run_dir) if args.run_dir else REPO / "runs" / args.task
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -121,10 +165,11 @@ def main():
 
         run = run_candidate(cand.code, ws, timeout=args.build_timeout)
         if run.ok:
-            rw = score(run.mesh, gt_mesh, candidate_sig=run.topology, gt_sig=gt_sig, cfg=cfg)
+            rw = score(run.mesh, gt_mesh, candidate_sig=run.topology, gt_sig=gt_sig,
+                       candidate_hist=run.histogram, gt_hist=gt_hist, cfg=cfg)
             renders = render_compare(run.mesh, gt_mesh, ws / "renders", tag="cand")
         else:
-            rw = score(None, gt_mesh, gt_sig=gt_sig, cfg=cfg)   # body gate -> 0
+            rw = score(None, gt_mesh, gt_sig=gt_sig, gt_hist=gt_hist, cfg=cfg)   # body gate -> 0
             renders = []
         report = build_report(run, rw, renders, attempt=attempt)
 

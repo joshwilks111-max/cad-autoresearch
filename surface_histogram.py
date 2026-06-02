@@ -13,14 +13,17 @@ accompany STEP round-trips: merging two seam edges into one doesn't change the
 face type of either neighbouring face. Yet the histogram remains discriminative:
 a missing hole = a missing Cylinder face -> cosine similarity drops.
 
-PROPOSED (not applied) reward integration note:
-  - Replace or supplement `topology_match` in reward.py Layer 4.
-  - Suggested weight: keep w_topology=0.15 but compute it as:
-      topo_s = 0.5 * topology_match(sig_c, sig_g) + 0.5 * histogram_similarity(hc, hg)
-  - Or swap entirely: topo_s = histogram_similarity(hc, hg) (drops kernel false
-    negatives at the cost of losing per-face-count discrimination for totally
-    wrong topologies). Hybrid is safer — exact counts still matter for simple parts.
-  - This module must be reviewed and integrated by a human before touching reward.py.
+SHIPPED reward integration (feat/reward-topology-hybrid):
+  - reward.py Layer 4 is now HYBRID:
+      topo_s = topo_exact_w * topology_match(sig_c, sig_g)
+             + (1 - topo_exact_w) * count_ratio_similarity(hc, hg)   (topo_exact_w=0.5)
+  - It uses `count_ratio_similarity` (scale-AWARE), NOT bare `histogram_similarity`
+    (cosine): cosine is scale-invariant and would over-reward an incomplete part
+    (Risk H). The count-ratio factor penalises missing faces. `histogram_similarity`
+    is retained below for the cosine A/B and is documented as unsafe-as-a-reward.
+  - w_topology is unchanged — the layer became more RELIABLE, not more important.
+  - Locked by tests/test_topology_hybrid.py; the histogram is computed in the runner
+    sandbox (OCP objects can't be pickled) and threaded into score() as a dict.
 """
 
 from __future__ import annotations
@@ -97,6 +100,15 @@ def histogram_similarity(hc: dict, hg: dict) -> float:
     Uses the UNION of keys from both histograms so missing types (count 0 in
     one, positive in the other) are penalised.  Returns 1.0 when both are
     identical, 0.0 when orthogonal (no shared surface types at all).
+
+    WARNING — SCALE-INVARIANT. Cosine measures the SHAPE of the type-vector, not
+    its magnitude: a candidate with the same Plane:Cylinder:Cone *ratio* but only
+    38% of the faces still scores ~0.99 (CTC-05's 59-face candidate vs a 156-face
+    GT reads hist_sim 0.9939). That is generous in the wrong direction — it
+    rewards being the right KIND of part while missing most of it. Do NOT use this
+    as a reward-layer similarity on its own; use ``count_ratio_similarity`` below,
+    which scales cosine by how much of the part is actually present. See the Risk-H
+    decision in the topology-hybrid plan / eng review.
     """
     keys = set(hc) | set(hg)
     vc = [hc.get(k, 0) for k in keys]
@@ -111,6 +123,51 @@ def histogram_similarity(hc: dict, hg: dict) -> float:
         return 0.0
 
     return float(dot / (norm_c * norm_g))
+
+
+def count_ratio_similarity(hc: dict, hg: dict) -> float:
+    """Scale-AWARE surface-type similarity in [0, 1] — the reward-layer default.
+
+    ``cosine(hc, hg) * (min(Σhc, Σhg) / max(Σhc, Σhg))``
+
+    The cosine factor rewards the right surface-TYPE mix (invariant to the
+    STEP-roundtrip seam-edge merges that break exact-count matching — the whole
+    point of the histogram). The count-ratio factor (total faces present, capped
+    at 1.0) re-introduces the magnitude cosine throws away, so a part MISSING
+    features cannot hide behind a similar type-ratio:
+
+        GT {Plane:13, Cylinder:4}  (17 faces)
+        full      {Plane:13, Cylinder:4}  -> cosine 1.000 * 17/17 = 1.000
+        -1 hole   {Plane:13, Cylinder:3}  -> cosine 0.997 * 16/17 = 0.938
+        -3 holes  {Plane:13, Cylinder:1}  -> cosine 0.962 * 14/17 = 0.792
+        bare box  {Plane:6}               -> cosine 0.852 *  6/17 = 0.301
+
+    Monotonically DECREASING as features go missing — the property a topology
+    similarity must have and cosine alone does not (cosine would score the -3-hole
+    case ~0.96). This is the falsifiable A/B that selected this blend over bare
+    cosine (the monotonicity ladder; see tests/test_topology_hybrid.py).
+
+    Returns 0.0 when either histogram is empty (an empty solid is maximally wrong),
+    matching ``histogram_similarity``'s zero-norm guard.
+
+    LAYER-LEVEL LIMITS (contained by the multi-layer composite, not by this function):
+      - SYMMETRIC in face count: a candidate with 2 EXTRA faces and one MISSING 2 faces
+        score the same min/max ratio. Over-completeness isn't penalised harder than
+        incompleteness here; volume/IoU catch spurious added material at the composite.
+      - SAME-HISTOGRAM-DIFFERENT-GEOMETRY: two parts with identical type-counts (a flat
+        washer vs an open tube, both {Plane:2,Cylinder:2}) score 1.0 here. The exact-count
+        half can also coincide; only volume/bbox/IoU/chamfer separate them. This is the
+        deliberate independent-layers design (a single layer's blind spot is covered by
+        the ensemble) — do NOT raise topo_exact_w to "fix" it; that narrows the margin on
+        exactly the feature-rich parts where adaptive_feature_weighting amplifies topology.
+    """
+    sum_c = sum(hc.values()) if hc else 0
+    sum_g = sum(hg.values()) if hg else 0
+    if sum_c <= 0 or sum_g <= 0:
+        return 0.0
+    cos = histogram_similarity(hc, hg)
+    ratio = min(sum_c, sum_g) / max(sum_c, sum_g)
+    return float(cos * ratio)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

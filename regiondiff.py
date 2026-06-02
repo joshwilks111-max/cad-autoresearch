@@ -188,7 +188,7 @@ def _load_reference_mesh(ref: str) -> trimesh.Trimesh:
     # treat as a task_id
     from run_inner_loop import load_task, load_ground_truth
     task = load_task(ref)
-    gt_mesh, _gt_sig = load_ground_truth(task)
+    gt_mesh, _gt_sig, _gt_hist = load_ground_truth(task)
     return gt_mesh
 
 

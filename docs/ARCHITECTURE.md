@@ -349,10 +349,11 @@ A task is the union of:
 
 `load_task(task_id)` (`run_inner_loop.py:43-49`) reads the manifest, finds the
 matching `id`, and stashes the resolved dir on `t["_dir"]`. `load_ground_truth`
-(`:52-66`) loads `ground_truth/result.stl` into a trimesh mesh and reads
-`ground_truth/topology.json` (tolerating a missing/corrupt file -> `sig=None`).
-It raises a clear `SystemExit` with the `make_ground_truth.py` command if the STL
-is not built (`:55-58`). The track resolves to `--track` if given, else the task's
+loads `ground_truth/result.stl` into a trimesh mesh, reads `ground_truth/topology.json`
+(tolerating a missing/corrupt file -> `sig=None`), AND computes the GT surface-type
+histogram lazily from the re-imported `result.step` (cached by content; for the
+hybrid Layer-4). It returns `(mesh, sig, gt_hist)` and raises a clear `SystemExit`
+with the `make_ground_truth.py` command if the STL is not built. The track resolves to `--track` if given, else the task's
 `default_track`, else `"spec"` (`:91`); the spec/drawing path is then passed into
 the proposer's `task_view` (`:91-93`, `:107-112`).
 
