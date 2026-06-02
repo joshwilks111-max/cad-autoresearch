@@ -1,6 +1,12 @@
 ---
 name: cad-grade
 description: Score a CAD part (a STEP file, or a build123d candidate) against a reference, deterministically, through the same multi-layer geometric referee the autoresearch loop uses. Use to certify a reconstruction's fidelity, compare a human STEP to an AI one on equal footing, or grade a finished part against a registered task's ground truth or a bring-your-own reference STEP. Triggers on "grade this STEP", "score this part against the reference", "how close is this to the target", "is this reconstruction correct", or running the time-trial referee. Returns a composite plus per-layer scores (body/bbox/volume/IoU/topology/chamfer) and actionable gaps. Do not use to model a part (that's cad-reconstruct) or to read a drawing (that's drawing-read).
+triggers:
+  - "grade this STEP"
+  - "score this part against the reference"
+  - "how close is this to the target"
+  - "is this reconstruction correct"
+  - "run the time-trial referee"
 ---
 
 # CAD grade

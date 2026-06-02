@@ -1,6 +1,12 @@
 ---
 name: cad-reconstruct
 description: Reconstruct a mechanical part as a build123d program and iterate it against a deterministic geometric grader (the propose → build → grade → revise loop). Use when given a written geometry spec to model, when asked to match/reproduce a reference STEP/STL, or when running the CAD autoresearch loop (propose a build123d candidate, grade it on volume/bbox/IoU/topology/Chamfer, read the feedback, revise). Triggers on "model this part", "build123d", "match this STEP", "reconstruct this part", or working inside a cad-autoresearch repo. If the input is a 2D drawing image, read it into a spec first with the drawing-read skill, then use this. To score a finished STEP against a reference, use the cad-grade skill. Do not use for freeform generative/artistic 3D, mesh sculpting, or CAM/toolpathing.
+triggers:
+  - "model this part"
+  - "reconstruct this part"
+  - "build123d candidate"
+  - "match this STEP"
+  - "run the cad autoresearch loop"
 ---
 
 # CAD reconstruct

@@ -1,6 +1,12 @@
 ---
 name: drawing-read
 description: Read a 2D mechanical engineering drawing (PNG/JPG/PDF) into a precise, structured geometry spec a modeller can build from without seeing the drawing. Use when the input is a drawing IMAGE rather than a written spec — extract every dimension, feature, polarity, and GD&T callout into JSON, with units normalized to mm. Triggers on "read this drawing", "extract dimensions from this drawing", "what are the dimensions in this print", "turn this drawing into a spec", or a drawing.png handed to a CAD task. This is the ~40% (Opus) / ~77% (Gemini) bottleneck in AI-to-CAD, so it is isolated from modelling on purpose. Hand the resulting spec to the cad-reconstruct skill to build it. Do not use to model a part (that's cad-reconstruct) or to score a STEP (that's cad-grade).
+triggers:
+  - "read this drawing"
+  - "extract dimensions from this drawing"
+  - "what are the dimensions in this print"
+  - "turn this drawing into a spec"
+  - "a drawing.png / drawing image handed to a CAD task"
 ---
 
 # Drawing read
