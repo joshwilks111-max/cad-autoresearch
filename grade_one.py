@@ -40,7 +40,7 @@ def main():
     args = ap.parse_args()
 
     task = load_task(args.task)
-    gt_mesh, gt_sig = load_ground_truth(task)
+    gt_mesh, gt_sig, gt_hist = load_ground_truth(task)
 
     code = Path(args.candidate).read_text()
     # Grade in a dedicated workspace so we never clobber the source candidate
@@ -51,10 +51,11 @@ def main():
     run = run_candidate(code, ws, timeout=args.build_timeout)
     if run.ok:
         rw = score(run.mesh, gt_mesh, candidate_sig=run.topology,
-                   gt_sig=gt_sig, cfg=RewardConfig())
+                   gt_sig=gt_sig, candidate_hist=run.histogram, gt_hist=gt_hist,
+                   cfg=RewardConfig())
         renders = render_compare(run.mesh, gt_mesh, ws / "renders", tag="cand")
     else:
-        rw = score(None, gt_mesh, gt_sig=gt_sig, cfg=RewardConfig())
+        rw = score(None, gt_mesh, gt_sig=gt_sig, gt_hist=gt_hist, cfg=RewardConfig())
         renders = []
 
     report = build_report(run, rw, renders)

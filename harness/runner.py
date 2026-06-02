@@ -125,6 +125,42 @@ _SANDBOX_EPILOGUE = textwrap.dedent(
         with open(_os.path.join(out, "topology.json"), "w") as f:
             _json.dump(sig, f)
 
+        # --- surface-type histogram (kernel-stable topology, parallel to sig) ---
+        # Hybrid Layer-4's histogram half. Computed HERE in the sandbox for the
+        # same reason topology.json is: OCP objects can't be pickled to the parent.
+        # D5: PREFER the canonical surface_histogram module (single source of the
+        # type-map + key list); fall back to an inline walk ONLY if the repo root
+        # isn't on the sandbox sys.path. tests/test_topology_hybrid.py asserts the
+        # inline fallback produces a byte-identical histogram to the module path.
+        hist = None
+        try:
+            try:
+                from surface_histogram import surface_histogram as _sh
+                hist = _sh(solid)              # canonical path (single source of truth)
+            except Exception:
+                # Inline fallback — keep these constants identical to
+                # surface_histogram._TYPE_NAMES / _CANONICAL_KEYS.
+                from OCP.TopExp import TopExp_Explorer as _TE
+                from OCP.TopAbs import TopAbs_FACE as _FACE
+                from OCP.TopoDS import TopoDS as _TDS
+                from OCP.BRepAdaptor import BRepAdaptor_Surface as _BAS
+                _NAMES = {0: "Plane", 1: "Cylinder", 2: "Cone", 3: "Sphere",
+                          4: "Torus", 6: "BSplineSurface"}
+                _KEYS = ["Plane", "Cylinder", "Cone", "Sphere", "Torus",
+                         "BSplineSurface", "Other"]
+                hist = {k: 0 for k in _KEYS}
+                _wh = getattr(solid, "wrapped", solid)   # SAME shape the topo walk used
+                _exp = _TE(_wh, _FACE)
+                while _exp.More():
+                    _t = int(_BAS(_TDS.Face_s(_exp.Current())).GetType())
+                    _nm = _NAMES.get(_t, "Other")
+                    hist[_nm if _nm in hist else "Other"] += 1
+                    _exp.Next()
+        except Exception:
+            hist = None
+        with open(_os.path.join(out, "histogram.json"), "w") as f:
+            _json.dump(hist, f)
+
     __ar_export()
     print("AR_EXPORT_OK")
     '''
@@ -139,6 +175,7 @@ class RunResult:
     stl_path: Path | None = None
     mesh: object | None = None            # trimesh.Trimesh
     topology: dict | None = None
+    histogram: dict | None = None         # surface-type histogram (hybrid Layer-4)
     meta: dict = field(default_factory=dict)
     stdout: str = ""
     stderr: str = ""
@@ -196,5 +233,6 @@ def run_candidate(code: str, workspace: str | Path, timeout: int = 120,
                      step_path=step_path if step_path.exists() else None,
                      stl_path=stl_path, mesh=mesh,
                      topology=_read_json(ws / "topology.json"),
+                     histogram=_read_json(ws / "histogram.json"),
                      meta=_read_json(ws / "meta.json") or {},
                      stdout=proc.stdout, stderr=proc.stderr, seconds=secs)

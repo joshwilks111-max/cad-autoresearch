@@ -28,6 +28,17 @@ import trimesh
 
 from . import geometry as G
 
+# Hybrid Layer-4 (topology). The histogram half uses the SCALE-AWARE count-ratio
+# blend, NOT bare cosine: cosine is scale-invariant, so a part missing most of its
+# features scores ~0.99 on type-ratio alone (the Risk-H failure). count_ratio_similarity
+# scales cosine by the fraction of faces present, so missing features cost monotonically.
+# Tolerant import: surface_histogram lives at the repo root (on sys.path for in-repo
+# callers); if it's unavailable the layer degrades to exact-count matching only.
+try:
+    from surface_histogram import count_ratio_similarity as _hist_sim
+except Exception:
+    _hist_sim = None
+
 
 @dataclass
 class RewardConfig:
@@ -47,6 +58,16 @@ class RewardConfig:
     w_iou: float = 0.25      # reduced from 0.30 to fund w_siou
     w_chamfer: float = 0.20
     w_siou: float = 0.10     # Surface IoU: catches surface errors volumetric IoU misses
+    # Hybrid Layer-4 blend (within the topology layer — NOT a layer weight). When a
+    # candidate + GT surface histogram are both available, the topology sub-score is
+    #   topo_s = topo_exact_w * exact_count_match + (1 - topo_exact_w) * count_ratio_sim
+    # exact-count is kernel-FRAGILE (a STEP roundtrip shifts edge/vertex counts) but
+    # discriminative for simple parts; the count-ratio histogram is roundtrip-STABLE
+    # (surface TYPE survives seam merges) and scale-aware. 0.5 = equal blend; raise
+    # toward exact for a more conservative (count-strict) layer. w_topology is unchanged
+    # — this makes the layer more RELIABLE, not more IMPORTANT. The exact + histogram
+    # sub-scores are always reported in raw[] so the blend is auditable, never a black box.
+    topo_exact_w: float = 0.5
     # sampling — IoU needs FAR more points than chamfer to stay self-consistent
     n_points: int = 8000        # chamfer surface samples
     iou_points: int = 60000     # IoU interior samples (dense vs iou_res grid)
@@ -142,6 +163,8 @@ def score(candidate_mesh: trimesh.Trimesh,
           gt_solid=None,
           candidate_sig: dict | None = None,
           gt_sig: dict | None = None,
+          candidate_hist: dict | None = None,
+          gt_hist: dict | None = None,
           cfg: RewardConfig | None = None) -> RewardResult:
     """Grade a candidate against ground truth.
 
@@ -151,6 +174,14 @@ def score(candidate_mesh: trimesh.Trimesh,
          pickled across processes);
       2. a live build123d / CadQuery object (`*_solid`);
       3. a mesh-based proxy as a last resort.
+
+    Layer 4 (topology) is HYBRID when both `candidate_hist` and `gt_hist` (surface-
+    type histograms) are supplied: it blends the exact-count match with a scale-aware
+    surface-type-histogram similarity (see `RewardConfig.topo_exact_w`). When the
+    histograms are absent (None) the layer falls back to exact-count matching ONLY —
+    identical to the pre-hybrid behaviour, so every existing caller keeps working
+    unchanged. The `*_hist` params sit BEFORE `cfg` and all callers pass `cfg=` by
+    keyword, so the inserted params are back-compatible.
     """
     cfg = cfg or RewardConfig()
     raw: dict = {}
@@ -188,8 +219,23 @@ def score(candidate_mesh: trimesh.Trimesh,
              or (G.topology_signature_from_solid(gt_solid)
                  if gt_solid is not None else None)
              or G.topology_signature_from_mesh(gt_mesh))
-    topo_s = G.topology_match(sig_c, sig_g)
+    # Hybrid Layer-4: exact-count match (kernel-fragile, discriminative for simple
+    # parts) blended with the scale-aware surface-type histogram (roundtrip-stable,
+    # lifts the topology ceiling on complex parts). Falls back to exact-only when the
+    # histograms aren't supplied — the pre-hybrid path, so existing callers are
+    # unaffected. Both sub-scores are ALWAYS exposed in raw[] (Risk-H: the blend must
+    # be auditable, never a silent default), even on the exact-only fallback.
+    exact_topo = G.topology_match(sig_c, sig_g)
+    raw["topology_exact"] = exact_topo
+    if _hist_sim is not None and candidate_hist and gt_hist:
+        hist_topo = _hist_sim(candidate_hist, gt_hist)
+        raw["topology_hist"] = hist_topo
+        topo_s = cfg.topo_exact_w * exact_topo + (1.0 - cfg.topo_exact_w) * hist_topo
+    else:
+        raw["topology_hist"] = None
+        topo_s = exact_topo
     raw["topology_candidate"], raw["topology_gt"] = sig_c, sig_g
+    raw["topology_hist_candidate"], raw["topology_hist_gt"] = candidate_hist, gt_hist
 
     # ---- Layer 5: IoU (pose invariant) ------------------------------------
     iou_s = G.iou(candidate_mesh, gt_mesh, res=cfg.iou_res,

@@ -23,13 +23,19 @@ A composite in [0,1] plus independent per-layer scores:
 - **volume** — total volume (catches polarity errors: a feature that should cut but
   added comes back over).
 - **iou** — gross shape/proportion (pose-invariant; cylindrical path for round parts).
-- **topology** — B-rep face/edge/vertex match (every missing fillet/chamfer/hole).
+- **topology** — HYBRID: exact B-rep count match blended 50/50 with a scale-aware
+  surface-type-histogram similarity (`topology_exact` + `topology_hist` reported
+  separately). The histogram half is invariant to STEP-roundtrip seam-edge merges,
+  so a COMPLETE part no longer loses topology to kernel/style drift; a part MISSING
+  features still scores low (the count-ratio factor penalises absent faces).
 - **chamfer** — exact radii and feature positions (a surface-distance term).
 
 Treat composite ≥ ~0.95 as "solved" — identical geometry caps near 0.97–0.99 from a
-sampling-spacing floor, not 1.0. High-face parts can be topology-capped well below
-that even with perfect geometry; read `docs/known-limitations.md` before calling a
-low score a bad reconstruction.
+sampling-spacing floor, not 1.0. A genuinely INCOMPLETE high-face part (missing many
+real features) is still topology-capped — honest, not a bug; the hybrid lifts kernel-
+ARTIFACT ceilings, not incompleteness. Check `topology_exact` vs `topology_hist`: low
+exact + high hist = kernel drift (rescued); BOTH low = features genuinely missing.
+Read `docs/known-limitations.md` before calling a low score a bad reconstruction.
 
 ## How to run
 - Grade a finished **STEP** against a registered task's hidden ground truth:

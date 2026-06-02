@@ -11,26 +11,32 @@ mechanics see [ARCHITECTURE.md](ARCHITECTURE.md); for the reward design rational
 
 ---
 
-## 1. The topology ceiling — high-face real parts cap ~0.88 regardless of geometry
+## 1. The topology ceiling — two kinds, only ONE is now lifted
 
-**The single most important thing to understand about the scores.** The topology layer
-matches EXACT B-rep counts; at the adaptive weight a feature-rich GT carries (~0.18 for a
-156-face part), a perfect revolve that produces ~57 faces against a 156-face GT scores
-`topo ≈ 0.29`, which alone caps the composite around **0.88 even with otherwise-perfect
-geometry**.
+**The single most important thing to understand about the scores.** Layer 4 is now a
+HYBRID (shipped on `feat/reward-topology-hybrid`): `topo = 0.5·exact_count_match +
+0.5·count_ratio_histogram_similarity`, with `topology_exact` and `topology_hist` reported
+separately. This splits the old ceiling into two distinct cases:
 
-- **Measured:** CTC-05 (156 GT faces) caps ~0.88; reconstructed to 0.688 (geometry-near-best
-  for the revolve family). FTC-09 (163 faces) → 0.758. STC-06 (144 faces) → 0.628.
-- **Low-face real parts are the opposite:** bearing_608 (4 faces) → **0.997**; FTC-11 washer
-  (6 faces) → 0.956. These match the GT B-rep graph exactly, so topo = 1.0.
-- **Consequence:** treat ≥0.95 as "solved." A complex real part stuck at 0.6–0.7 with
-  `vol/bbox≈1.0` and low `topo` is **topology-capped, not badly reconstructed** — do not
-  burn turns trying to push its geometry. Confirm by reading the layer breakdown: if
-  `topo` is the floor and `vol`/`bbox` are ~1.0, you've hit the ceiling.
-- **The real fix** (deferred, reviewed): a kernel-stable surface-type histogram instead of
-  exact counts — see [research-and-deferred.md](research-and-deferred.md) and
-  `build-specs/PROPOSAL_reward_topology_upgrade.md`. The tool exists (`surface_histogram.py`),
-  the reward wiring is a held proposal.
+- **KERNEL-ARTIFACT ceiling — NOW LIFTED.** A COMPLETE part penalised only by STEP-roundtrip
+  seam-edge merges (51→49 edges) used to lose exact-count topology for nothing. The histogram
+  half is invariant to seam merges (surface TYPE survives), so it rescues these: the in-memory-
+  signed L-bracket goes `topo 0.7143 → 0.8571`, composite **0.9555 → 0.9760** (crosses solved).
+- **INCOMPLETENESS ceiling — STILL CAPPED (correctly).** A genuinely incomplete high-face part
+  (missing real features) stays low, because the histogram half is **count-ratio-scaled**, not
+  bare cosine: a candidate with 59 of 156 faces scores `topology_hist ≈ 0.376` (not 0.99), so
+  CTC-05 lifts only `0.6878 → 0.6955`. This is **honest** — the part IS missing 62% of its
+  faces. (Bare cosine would have inflated it to ~0.75 by ignoring the missing material — the
+  Risk-H failure the count-ratio blend was chosen to avoid.)
+- **Low-face complete parts:** bearing_608 (4 faces) → **0.997**, FTC-11 (6) → 0.956. Both
+  halves are 1.0, so the hybrid is a no-op — exact match preserved.
+- **Triage:** read the layer breakdown. `topology_exact` LOW + `topology_hist` HIGH = kernel
+  drift (the hybrid has already rescued it). BOTH low = features genuinely missing (still
+  capped, correctly). `topo` floor + `vol`/`bbox` ≈ 1.0 = incompleteness, not bad geometry.
+- **History:** the fix shipped from `build-specs/PROPOSAL_reward_topology_upgrade.md` via
+  `surface_histogram.py`'s `count_ratio_similarity` (the eng review replaced the proposal's
+  bare cosine with the scale-aware count-ratio blend per Risk H). Locked by
+  `tests/test_topology_hybrid.py`.
 
 ## 2. Round / annular parts: cylindrical IoU, not voxel IoU
 

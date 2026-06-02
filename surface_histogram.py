@@ -97,6 +97,15 @@ def histogram_similarity(hc: dict, hg: dict) -> float:
     Uses the UNION of keys from both histograms so missing types (count 0 in
     one, positive in the other) are penalised.  Returns 1.0 when both are
     identical, 0.0 when orthogonal (no shared surface types at all).
+
+    WARNING — SCALE-INVARIANT. Cosine measures the SHAPE of the type-vector, not
+    its magnitude: a candidate with the same Plane:Cylinder:Cone *ratio* but only
+    38% of the faces still scores ~0.99 (CTC-05's 59-face candidate vs a 156-face
+    GT reads hist_sim 0.9939). That is generous in the wrong direction — it
+    rewards being the right KIND of part while missing most of it. Do NOT use this
+    as a reward-layer similarity on its own; use ``count_ratio_similarity`` below,
+    which scales cosine by how much of the part is actually present. See the Risk-H
+    decision in the topology-hybrid plan / eng review.
     """
     keys = set(hc) | set(hg)
     vc = [hc.get(k, 0) for k in keys]
@@ -111,6 +120,40 @@ def histogram_similarity(hc: dict, hg: dict) -> float:
         return 0.0
 
     return float(dot / (norm_c * norm_g))
+
+
+def count_ratio_similarity(hc: dict, hg: dict) -> float:
+    """Scale-AWARE surface-type similarity in [0, 1] — the reward-layer default.
+
+    ``cosine(hc, hg) * (min(Σhc, Σhg) / max(Σhc, Σhg))``
+
+    The cosine factor rewards the right surface-TYPE mix (invariant to the
+    STEP-roundtrip seam-edge merges that break exact-count matching — the whole
+    point of the histogram). The count-ratio factor (total faces present, capped
+    at 1.0) re-introduces the magnitude cosine throws away, so a part MISSING
+    features cannot hide behind a similar type-ratio:
+
+        GT {Plane:13, Cylinder:4}  (17 faces)
+        full      {Plane:13, Cylinder:4}  -> cosine 1.000 * 17/17 = 1.000
+        -1 hole   {Plane:13, Cylinder:3}  -> cosine 0.997 * 16/17 = 0.938
+        -3 holes  {Plane:13, Cylinder:1}  -> cosine 0.962 * 14/17 = 0.792
+        bare box  {Plane:6}               -> cosine 0.852 *  6/17 = 0.301
+
+    Monotonically DECREASING as features go missing — the property a topology
+    similarity must have and cosine alone does not (cosine would score the -3-hole
+    case ~0.96). This is the falsifiable A/B that selected this blend over bare
+    cosine (the monotonicity ladder; see tests/test_topology_hybrid.py).
+
+    Returns 0.0 when either histogram is empty (an empty solid is maximally wrong),
+    matching ``histogram_similarity``'s zero-norm guard.
+    """
+    sum_c = sum(hc.values()) if hc else 0
+    sum_g = sum(hg.values()) if hg else 0
+    if sum_c <= 0 or sum_g <= 0:
+        return 0.0
+    cos = histogram_similarity(hc, hg)
+    ratio = min(sum_c, sum_g) / max(sum_c, sum_g)
+    return float(cos * ratio)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
