@@ -1,0 +1,28 @@
+{
+  "_comment": "HAND-AUTHORED answer key for the trial_lbracket drawing-read eval. Derived ONLY from the dimensions actually DRAWN on tasks/trial_lbracket/drawing.png (rendered by make_drawing.py from the authored spec constants) — NOT from anything under ground_truth/. Scores reading-fidelity: a perfect read of THIS PAGE. Note the drawing shows no GD&T, no tolerances, and no chamfer callout, so those are absent here by design.",
+  "units": "mm",
+  "unit_source": "title_block",
+  "scale": "unknown",
+  "views_present": ["FRONT", "TOP", "RIGHT"],
+  "dimensions": [
+    {"view": "FRONT", "type": "linear", "nominal_mm": 120.0, "feature_ref": "plate_width"},
+    {"view": "FRONT", "type": "linear", "nominal_mm": 44.0, "feature_ref": "overall_height"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 90.0, "feature_ref": "bolt_spacing_x"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 36.0, "feature_ref": "bolt_spacing_y"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 60.0, "feature_ref": "plate_depth"},
+    {"view": "RIGHT", "type": "linear", "nominal_mm": 24.0, "feature_ref": "gusset_leg"},
+    {"view": "RIGHT", "type": "linear", "nominal_mm": 8.0, "feature_ref": "wall_thickness"},
+    {"view": "RIGHT", "type": "linear", "nominal_mm": 8.0, "feature_ref": "plate_thickness"}
+  ],
+  "features": [
+    {"id": "base_holes", "type": "through_hole", "polarity": "cut", "diameter_mm": 8.0, "depth_mm": null, "quantity": 4, "gdt_refs": []},
+    {"id": "wall_holes", "type": "through_hole", "polarity": "cut", "diameter_mm": 8.0, "depth_mm": null, "quantity": 2, "gdt_refs": []}
+  ],
+  "gdt_frames": [],
+  "title_block": {
+    "material": null,
+    "drawing_number": null,
+    "general_tolerance_note": null,
+    "scale_text": null
+  }
+}

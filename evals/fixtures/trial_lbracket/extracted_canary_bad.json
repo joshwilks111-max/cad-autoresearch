@@ -1,0 +1,25 @@
+{
+  "_comment": "CANARY — a deliberately BAD read of the same drawing. The eval MUST fail this. Two classic real failure modes combined: (1) the inch->mm trap — units misread as 'in' when the title block says mm; (2) dropped callouts — only 3 of 8 dimensions recovered and one hole group missed. If a future change to the scorer ever lets this PASS, the eval has lost its teeth. Kept alongside the good fixture so the test brackets the bar from both sides.",
+  "units": "in",
+  "unit_source": "magnitude",
+  "scale": "unknown",
+  "views_present": ["FRONT"],
+  "dimensions": [
+    {"view": "FRONT", "type": "linear", "nominal_mm": 120.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "width"},
+    {"view": "FRONT", "type": "linear", "nominal_mm": 44.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "height"},
+    {"view": "FRONT", "type": "linear", "nominal_mm": 8.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "thickness"}
+  ],
+  "features": [
+    {"id": "hole_1", "type": "through_hole", "polarity": "cut", "diameter_mm": 8.0, "depth_mm": null, "quantity": 4, "gdt_refs": []}
+  ],
+  "gdt_frames": [],
+  "title_block": {
+    "material": null,
+    "drawing_number": null,
+    "general_tolerance_note": null,
+    "scale_text": null
+  },
+  "_backend": "frozen-fixture",
+  "_backend_detail": "deliberately-bad canary: inch misread + dropped callouts",
+  "_warnings": []
+}
