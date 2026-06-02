@@ -38,6 +38,8 @@ from pathlib import Path
 
 import yaml
 
+from loop.billing import print_billing_banner, scrub_billing_env
+
 REPO = Path(__file__).resolve().parent
 
 
@@ -185,6 +187,11 @@ def main():
 
     print(f"== orchestrator: {len(jobs)} workers "
           f"({args.workers}/task x {len(args.tasks)} tasks) backend={args.backend} ==")
+    # Defense in depth: strip billing-steering vars from THIS process env before spawning
+    # workers, so workers (and the candidate sandbox they inherit) can't pass a metered
+    # credential to `claude -p`. The per-spawn scrub in policies.py is the backstop.
+    scrub_billing_env()
+    print_billing_banner()   # once per launch — which plane (subscription) is active
     if args.backend == "tmux":
         launch_tmux(args.session, jobs, args.dry_run)
     else:

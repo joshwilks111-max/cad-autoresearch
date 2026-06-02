@@ -19,10 +19,14 @@ they define the loop, the candidate contract, the scoring, and the guardrails.
 Follow them exactly.
 
 We are running this loop INTERACTIVELY, with me watching — not headless. You are
-the proposer and you grade your own candidates with the harness. Stay on my Claude
-subscription: do not set or use an API key, and do NOT run orchestrator.py,
-watcher.py, or `run_inner_loop.py --proposer claude` — those spawn headless agents
-that bill the API. The only model doing work here is you, in this session.
+the proposer and you grade your own candidates with the harness. In THIS session,
+don't launch orchestrator.py, watcher.py, or `run_inner_loop.py --proposer claude`
+— not because they bill the API (they don't; they shell out to `claude -p`, which
+bills my subscription via OAuth), but because they're the *unattended grid* path
+and we're doing the *interactive watching* path here. The only model doing work in
+this session is you. One billing rule applies to BOTH paths: keep `ANTHROPIC_API_KEY`
+unset — `claude -p` prefers it when present, which is the one way to accidentally
+hit the metered API.
 
 SETUP (do once, show me the output):
 1. If tasks/sample_bracket/ground_truth/result.stl is missing, run:
@@ -76,5 +80,7 @@ attempt.
   prompt's input line to the drawing instead of `spec.md`. That's the hard,
   vision-bound half — where a dedicated reading pass (prompts/vision_subagent.md)
   earns its keep.
-- When you want scale/overnight runs, move to the grid (`orchestrator.py`) — on the
-  Agent SDK credit from 15 June, or an API key for sustained runs.
+- When you want scale/overnight runs, move to the grid (`orchestrator.py`) — it runs
+  on your subscription too (it drives `claude -p`, not the API). From 2026-06-15,
+  headless `claude -p` draws from a separate monthly Agent SDK credit allotment, so
+  check your plan's limits before a hundreds-of-turns overnight grid.

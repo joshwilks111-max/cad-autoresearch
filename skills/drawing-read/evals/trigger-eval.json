@@ -1,0 +1,21 @@
+[
+  {"query": "ok i've got this mechanical drawing as a png (it's at tasks/widget/drawing.png) and i need to get all the dimensions and hole callouts out of it into some structured format my modeller can use — can you read it for me", "should_trigger": true},
+  {"query": "here's a scanned engineering print of a bracket, third-angle projection, dims in inches. pull out every dimension, the GD&T frames, and the bore diameters into JSON for me, in mm", "should_trigger": true},
+  {"query": "what are the dimensions in this print? i can see a front and top view but i'm not sure which number is the bolt spacing vs the overall width", "should_trigger": true},
+  {"query": "turn this 2D drawing into a spec I can build from — I don't want to model it yet, just get the views, dims, and features written down faithfully", "should_trigger": true},
+  {"query": "i have drawing.png in the trial_lbracket task folder, extract the geometry spec from it. units, views present, dims, the 4x and 2x hole groups with diameters and whether they're cut or boss", "should_trigger": true},
+  {"query": "read the engineering drawing image and tell me the structured dimensions — careful with the inch vs mm thing, the title block says inches", "should_trigger": true},
+  {"query": "this is a dense PMI drawing with a bunch of feature control frames. i need the position tolerances and datum references extracted along with the linear dims, into the standard schema", "should_trigger": true},
+  {"query": "got a photo of a part drawing from the shop floor, can you get the hole pattern and the overall envelope out of it as data", "should_trigger": true},
+
+  {"query": "model this part in build123d from the spec I just wrote: a 80x50x8 plate with four M5 holes and a central slot. give me the candidate.py", "should_trigger": false},
+  {"query": "grade my STEP file against the bearing_608 reference and tell me the composite score and per-layer breakdown", "should_trigger": false},
+  {"query": "the volume on my reconstructed part keeps coming out too high, what's wrong with my build123d code", "should_trigger": false},
+  {"query": "write me a python script to batch-convert a folder of STEP files to STL using build123d", "should_trigger": false},
+  {"query": "i have a written spec.md for the motor_mount, reconstruct it as a build123d program and grade it on the spec track", "should_trigger": false},
+  {"query": "can you read this PDF invoice and pull out the line items and totals into a spreadsheet", "should_trigger": false},
+  {"query": "extract the text from this scanned contract PDF and summarize the key clauses", "should_trigger": false},
+  {"query": "generate a 3D model of a dragon for my game, something stylized and organic", "should_trigger": false},
+  {"query": "what does the reward.py topology layer actually measure and why does my part cap at 0.88", "should_trigger": false},
+  {"query": "open this drawing.png and just tell me if it looks like a bracket or a flange, i don't need the dimensions", "should_trigger": false}
+]

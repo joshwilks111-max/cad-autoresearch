@@ -1,0 +1,30 @@
+{
+  "_comment": "FROZEN model output for offline replay. Stand-in for a recorded `drawing_extract.py` read of tasks/trial_lbracket/drawing.png, shaped exactly like its EMPTY_SCHEMA output. Refresh with: RUN_LLM_EVALS=1 .venv/Scripts/python.exe drawing_extract.py --drawing tasks/trial_lbracket/drawing.png --json > evals/fixtures/trial_lbracket/extracted.json . This stand-in models a realistic read: most callouts recovered, units correct, both hole groups found, but the second '8mm thickness' (plate vs wall) recorded once — recall ~0.875, a genuine pass above the 0.8 bar.",
+  "units": "mm",
+  "unit_source": "title_block",
+  "scale": "1:1",
+  "views_present": ["FRONT", "TOP", "RIGHT"],
+  "dimensions": [
+    {"view": "FRONT", "type": "linear", "nominal_mm": 120.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "width"},
+    {"view": "FRONT", "type": "linear", "nominal_mm": 44.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "height"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 90.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "hole_spacing"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 36.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "hole_rows"},
+    {"view": "TOP", "type": "linear", "nominal_mm": 60.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "depth"},
+    {"view": "RIGHT", "type": "linear", "nominal_mm": 24.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "gusset"},
+    {"view": "RIGHT", "type": "linear", "nominal_mm": 8.0, "upper_tol_mm": null, "lower_tol_mm": null, "feature_ref": "thickness"}
+  ],
+  "features": [
+    {"id": "hole_1", "type": "through_hole", "polarity": "cut", "diameter_mm": 8.0, "depth_mm": null, "quantity": 4, "gdt_refs": []},
+    {"id": "hole_2", "type": "through_hole", "polarity": "cut", "diameter_mm": 8.0, "depth_mm": null, "quantity": 2, "gdt_refs": []}
+  ],
+  "gdt_frames": [],
+  "title_block": {
+    "material": null,
+    "drawing_number": null,
+    "general_tolerance_note": null,
+    "scale_text": "1:1"
+  },
+  "_backend": "frozen-fixture",
+  "_backend_detail": "hand-authored stand-in modeling a realistic Gemini/Claude read",
+  "_warnings": []
+}

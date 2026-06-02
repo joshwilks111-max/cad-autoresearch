@@ -28,6 +28,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent
 import orchestrator as orch   # reuse worker_cmd / aggregate  # noqa: E402
+from loop.billing import print_billing_banner, scrub_billing_env, subscription_env  # keep on the subscription  # noqa: E402
 
 
 def read_manifest(session: str) -> dict:
@@ -69,7 +70,9 @@ def run_meta_agent(session: str, model: str, cli: str = "claude",
            "--permission-mode", "acceptEdits",
            "--allowedTools", "Read,Edit,Glob,Grep"]
     try:
-        subprocess.run(cmd, cwd=str(REPO), timeout=timeout, capture_output=True)
+        # env scrub: the meta-agent spawns `claude` too — keep it on the subscription.
+        subprocess.run(cmd, cwd=str(REPO), timeout=timeout, capture_output=True,
+                       env=subscription_env())
     except Exception as e:
         print(f"[watcher] meta agent skipped: {e!r}")
 
@@ -99,6 +102,10 @@ def main():
 
     print(f"[watcher] session={args.session} backend={man['backend']} "
           f"target={target} wall_clock={args.wall_clock_minutes}min")
+    # Defense in depth: the watcher restarts workers (which inherit this env) and spawns
+    # the meta-agent — strip billing-steering vars here too. Per-spawn scrubs are backstops.
+    scrub_billing_env()
+    print_billing_banner()   # which plane (subscription) the meta-agent will use
 
     while True:
         elapsed_min = (time.time() - t_start) / 60.0

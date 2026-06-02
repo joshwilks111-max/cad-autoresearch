@@ -21,3 +21,4 @@ _staging/
 # timetrial/artifacts/, added explicitly after a run)
 timetrial/results.jsonl
 timetrial/results_table.md
+skill-tuning-workspace/

@@ -96,7 +96,11 @@ python watcher.py
 - **Aggregate.** `python orchestrator.py --aggregate-only` rebuilds the global
   per-task leaderboard and promotes the best STEP to `runs/<session>/<task>/BEST/`.
 
-Requires the Claude Code CLI on `PATH` and an API key in the environment.
+Requires the Claude Code CLI on `PATH`, signed in to your plan (`claude login`). **No
+API key needed** — the proposer drives `claude -p`, which bills your subscription via
+OAuth. In fact `ANTHROPIC_API_KEY` is *scrubbed* before each `claude` spawn (it would
+otherwise be preferred and silently bill the metered API); the launcher prints which
+billing plane is active.
 
 ## The two tracks
 
