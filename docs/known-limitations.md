@@ -63,20 +63,31 @@ round part scored a false-low volumetric IoU (~0.62) for a long time.
   occupancy about the symmetry axis, with a shared (r, z) frame + axial-sign search. FTC-11
   washer IoU 0.619 → 0.986; it became the first solved real NIST part purely from this
   reward-bug fix (the candidate was byte-identical).
-- **NOT fully resolved — low-aspect annuli (reproduced 2026-06-03).** The fix handles the
-  axial-SIGN ambiguity but NOT the in-plane ANGULAR degeneracy. For a near-cubic annulus
-  (e.g. `bearing_608`, OD22 × width7, ~3:1) the two in-plane radial eigenvalues are within
-  ~3% (top-2 ratio 0.967), so the radial-histogram binning grid origin depends on the mesh's
-  angular tessellation offset — which differs between two independently-built meshes of the
-  SAME solid. Observed in a live grid: two workers each modelled `bearing_608` correctly via
-  different code paths (`Circle−Circle extrude` vs `Cylinder−Cylinder`); one scored iou=1.00,
-  the other **iou=0.00**, on byte-equal geometry. GT-free isolation: `iou(w0,w1)=0.0`,
-  self-IoU 1.0 for both. The flip is DETERMINISTIC per mesh (iou() is seeded), not RNG — it's
-  the representation, not run-to-run noise. FTC-11's fix was verified on a consistently-
-  tessellated mesh pair, so it never exercised this. **Proper fix (deferred, guarded):** make
-  the radial comparison angular-offset-invariant — bin r and z into two SEPARATE 1-D
-  histograms and IoU each (removes the joint-grid origin sensitivity entirely); re-verify
-  FTC-11 0.956 + all round-part self-identity + no prismatic regression before shipping.
+- **NOT fully resolved — radial-frame quantization (CONFIRMED 2026-06-03, root cause corrected).**
+  A round part can score a degraded IoU against an equivalent build of the SAME solid. The bug is
+  REPRODUCED through the real grader (`scripts/iou_roundpart_diag.py`, issue #7): two perfectly-round
+  annuli of identical OD/bore/width built different ways (`Circle` vs `Ellipse(11,11)` — a circle as
+  an equal-radii ellipse) tessellate differently (504 vs 530 verts) and score
+  **`iou = 0.7826`** (deterministic, 5/5 repeats; self-IoU 1.0 each; both routed to `_cylindrical_iou`).
+  **Root cause (measured):** the radial frame `rmax = max(ra.max(), rb.max())` (`geometry.py:259`) is
+  derived from the SAMPLED point clouds; a sub-micron difference in `r.max()` between two tessellations
+  (`Δrmax = 0.000583 mm` here) shifts every one of the 64 radial bin edges (`ri = r/rmax·(nbins-1)`), so
+  identical material lands in different bins and the joint-grid IoU collapses. The symmetry **axis is
+  STABLE** (0.000° between the two clouds) — this is a **binning-quantization** bug, NOT the in-plane
+  ANGULAR degeneracy the original note guessed, and NOT axis instability. (The live grid's 1.00↔0.00
+  was a more severe instance of the same mechanism.)
+  **Diagnostic history (do not repeat):** the FIRST diagnostic built `bearing_608` as `Circle−Circle`
+  vs `Cylinder−Cylinder` and wrongly concluded "does not reproduce" — those two primitives lower to
+  BYTE-IDENTICAL meshes (both 504 verts), so it never created the "two DIFFERENT meshes of one solid"
+  condition the bug needs. Lesson: to test this class of bug you must build the same solid a way that
+  actually produces a different tessellation (vertex count differs).
+  **Fix (the plan's tolerant-2-D, VERIFIED to recover):** make the joint (r,z) comparison tolerant to
+  ±1-bin jitter — a numpy-only ±1-bin dilation of each occupancy grid before IoU. Measured: it lifts
+  `iou 0.7826 → 0.9310`. (Do NOT use 1-D marginals — they false-positive on stepped round parts.) This
+  is a GUARDED change to `harness/geometry.py`; needs explicit approval. Acceptance: re-verify FTC-11
+  ≥0.956 + all round-part self-identity (=1.0) + the Circle-vs-Ellipse pair ≥0.95 + no prismatic
+  regression. **Open:** the live grid's full 0.00 (vs this 0.78) may need the original worker's candidate
+  STL to reproduce the extreme; the tolerant fix addresses the mechanism regardless.
 - **Landmine:** the symmetry detector mis-routes **near-equal-extent prismatic parts** (e.g.
   a part that is coincidentally ~square in two axes). For the time-trial part this was avoided
   by choosing DISTINCT extents (120/60/44, eigenvalue ratios 1:2.8:13) so it takes the voxel

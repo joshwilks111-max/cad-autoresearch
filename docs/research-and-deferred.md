@@ -16,11 +16,15 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
   deterministic IoU, Euler-χ in the topology signature, RNG restoration. The geometric reward is
   sound and robust; the frontier is breadth + the *engineering-correctness* and *authoring-feedback*
   axes, not the core geometry score.
-- **Round-part cylindrical IoU (PARTIAL).** Rotation-invariant radius×axial occupancy. Fixed the
-  false-low IoU on high-aspect annular parts (FTC-11 + 3 synthetic round parts). **Still open for
-  low-aspect annuli** (e.g. bearing_608, ~3:1): the in-plane angular degeneracy makes the score
-  flip 1.00↔0.00 by mesh tessellation. Deferred fix = separate 1-D r and z histograms. See
-  limitations #2.
+- **Round-part cylindrical IoU (PARTIAL — a real bug remains, confirmed 2026-06-03).** Rotation-
+  invariant radius×axial occupancy fixed the false-low IoU on high-aspect annular parts (FTC-11 + 3
+  synthetic round parts). **Still broken — radial-frame quantization:** two equal round annuli built
+  different ways (`Circle` vs `Ellipse(11,11)`) tessellate differently and score `iou=0.7826` through
+  the real grader (reproduced in `scripts/iou_roundpart_diag.py`, issue #7). Root cause = the sampled
+  shared `rmax` at `geometry.py:259`; a sub-micron `r.max()` delta shifts all radial bins (axis is
+  stable — NOT an angular/axis bug). Fix = tolerant joint (r,z) comparison (numpy ±1-bin dilation,
+  verified to recover 0.78→0.93); NOT 1-D marginals (they false-positive on stepped parts). Guarded —
+  needs approval. See the deferred entry below + limitations #2.
 - **Reward-honesty fixes.** (a) topology schema-mismatch returns neutral 0.5 instead of 0.0 when a
   mesh-proxy signature meets a B-rep GT signature (they share only euler, with different defs).
   (b) Adaptive feature-weighting (shift weight into iou+topology for feature-rich GTs, keyed on GT
@@ -92,16 +96,27 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
    engineering needs); a FreeCAD/CalculiX FEM + ocp-freecad-cam G-code "it's manufacturable" loop;
    a BYO-part + MCP grading server.
 8. **Metric-authoring skill (Software 3.0 for the grader).** Stop hand-patching `harness/geometry.py`
-   kernels (the round-part IoU has been fixed twice and a third degeneracy was suspected — the abstraction
-   keeps leaking, even though that third case did not reproduce when diagnosed; see issue #7). A
-   SKILL = (prompt + an accumulating property-based eval benchmark); an LLM GENERATES the deterministic
-   kernel OFFLINE, you iterate the PROMPT until it passes every invariant, then FREEZE the produced
-   python into `geometry.py`. Load-bearing: the LLM NEVER runs at grade time (determinism, limitations
-   #9), and the skill PROPOSES — a human approves the guarded merge. Codex's warning: the grader IS the
-   optimization target, so the benchmark must be property-based with adversarial false-positive cases,
-   not case-based (else an overfit kernel trains agents toward wrong geometry while showing green). Full
-   design: `docs/designs/metric-authoring-skill.md`. The `tasks/iou_benchmark/` property benchmark is
-   **not yet built** — it is the skill build session's first deliverable.
+   kernels (the round-part IoU has been fixed twice and a third degeneracy is now CONFIRMED — the
+   abstraction keeps leaking; see item 9 + issue #7). A SKILL = (prompt + an accumulating property-based
+   eval benchmark); an LLM GENERATES the deterministic kernel OFFLINE, you iterate the PROMPT until it
+   passes every invariant, then FREEZE the produced python into `geometry.py`. Load-bearing: the LLM
+   NEVER runs at grade time (determinism, limitations #9), and the skill PROPOSES — a human approves the
+   guarded merge. Codex's warning: the grader IS the optimization target, so the benchmark must be
+   property-based with adversarial false-positive cases, not case-based (else an overfit kernel trains
+   agents toward wrong geometry while showing green). Full design: `docs/designs/metric-authoring-skill.md`.
+   The `tasks/iou_benchmark/` property benchmark is **not yet built** — it is the skill build session's
+   first deliverable.
+9. **Round-part IoU tolerant fix (confirmed bug — limitations #2 / issue #7).** `_cylindrical_iou`'s
+   shared `rmax` radial frame (`geometry.py:259`) is quantization-sensitive: two equal round annuli built
+   different ways score `iou=0.78` (reproduced, `scripts/iou_roundpart_diag.py`). A ±1-bin dilation lifts
+   the CHUNKY case (bearing_608, ~3:1) 0.78→0.93 — but it BREAKS thin high-aspect washers (FTC-11 class,
+   ~15:1: wrong-bore scores HIGHER than correct), so the fix is **aspect-ratio-dependent and NOT yet
+   solved**. Real FTC-11 could not be verified GT-free (its GT is under `ground_truth/`), so the bug's
+   blast radius on solved parts is unknown. **Parked for a dedicated investigation + engineering-review
+   pass** — the issue #7 handoff comment has the full data + open design questions (aspect-aware binning?
+   density-normalized or banded radial comparison? does real FTC-11 even regress?). NOT 1-D marginals
+   (they false-positive on stepped parts). Touches guarded `harness/geometry.py` — needs explicit
+   approval once a cross-aspect fix is found.
 
 ## Where the deep research lives
 
