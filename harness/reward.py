@@ -194,7 +194,13 @@ def score(candidate_mesh: trimesh.Trimesh,
     raw["candidate_watertight"] = (bool(getattr(candidate_mesh, "is_watertight", False))
                                    if body_ok else False)
     if not body_ok:
-        return RewardResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, raw)
+        # Keyword-args: `raw` is the 9th field, AFTER `siou` (field 8). A bare
+        # positional `raw` here would land in the `siou` slot (dict in a float
+        # field) and crash summary()'s f"{siou:.3f}" — and silently drop the raw
+        # diagnostics. Naming the kwargs makes this return immune to future field
+        # insertions between `chamfer` and `raw`.
+        return RewardResult(composite=0.0, body=0.0, volume=0.0, bbox=0.0,
+                            topology=0.0, iou=0.0, chamfer=0.0, raw=raw)
 
     # ---- Layer 2: volume ---------------------------------------------------
     vc, vg = G.volume(candidate_mesh), G.volume(gt_mesh)

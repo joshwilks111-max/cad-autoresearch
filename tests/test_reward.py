@@ -36,6 +36,30 @@ def test_body_gate_rejects_empty():
     assert r.composite == 0.0
 
 
+def test_body_gate_fail_returns_well_formed_result():
+    """Regression for the 2026-06-03 grid crash: the body-gate early-return
+    (reward.py `if not body_ok`) built RewardResult with a bare positional `raw`,
+    which (after siou became field #8) landed in the `siou` slot. That made siou a
+    dict, so summary()'s f"{siou:.3f}" raised TypeError and KILLED the worker — the
+    orchestrator then mislabelled the dead worker as "timeout after 120s". It also
+    silently dropped the `raw` diagnostics that feedback.py reads.
+
+    The existing test above only checks body/composite (the fields the bug does NOT
+    corrupt), so it never caught this. This asserts the corrupted fields:
+      - siou stays a float (not a dict),
+      - summary() renders without raising,
+      - raw carries the candidate_watertight flag feedback.py depends on.
+    Fails pre-fix (TypeError in summary / dict siou); passes post-fix."""
+    gt_mesh, gt_sig = _gt()
+    r = score(None, gt_mesh, gt_sig=gt_sig)          # None candidate -> body gate fails
+    assert isinstance(r.siou, float), f"siou must be a float, got {type(r.siou).__name__}"
+    assert r.siou == 0.0
+    assert isinstance(r.raw, dict) and r.raw.get("candidate_watertight") is False
+    # The actual crash site: this must not raise.
+    s = r.summary()
+    assert "siou=0.000" in s
+
+
 def test_identical_scores_high():
     gt_mesh, gt_sig = _gt()
     r = score(gt_mesh, gt_mesh, candidate_sig=gt_sig, gt_sig=gt_sig)
@@ -167,3 +191,30 @@ def test_runner_builds_and_grades_monotonic():
     assert s3.composite > s1.composite
     assert s3.topology == 1.0        # full part matches GT topology exactly
     assert s3.composite > 0.9
+
+
+def test_runner_relative_workspace_does_not_double_path():
+    """Regression for the 2026-06-03 grid zeroing: run_candidate ran the subprocess
+    with cwd=workspace but passed a still-RELATIVE script path, so the OS re-resolved
+    it against the new cwd -> a doubled path (runs/x/.../runs/x/.../candidate.py) ->
+    "can't open file" -> candidate exited 2 -> graded body=0. With the orchestrator and
+    --run-dir both passing relative run dirs, this zeroed EVERY worker's build.
+
+    The existing runner test above only ever used an ABSOLUTE workspace (REPO/...), so
+    it never caught this. This passes a RELATIVE workspace — the exact production
+    condition. Fails pre-fix (r.ok False, 'exited 2'); passes post-fix (ws.resolve()).
+
+    cwd is changed to REPO so the relative path is well-defined, then restored."""
+    import os
+    code = ("from build123d import *\n"
+            "with BuildPart() as p:\n    Box(10, 10, 10)\n"
+            "result = p")
+    rel_ws = os.path.join("runs", "_pytest_relws", "ws")
+    prev = os.getcwd()
+    try:
+        os.chdir(str(REPO))
+        r = run_candidate(code, rel_ws, timeout=120)
+    finally:
+        os.chdir(prev)
+    assert r.ok, f"relative workspace must build, not double the path; error={r.error!r}"
+    assert r.error is None
