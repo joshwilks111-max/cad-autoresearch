@@ -141,6 +141,13 @@ def score_rows(rows: list[dict], *, bar: float = DEFAULT_BAR) -> dict[str, TaskR
     is the MIN earliest-crossing across its groups (the best run is the honest 'can it
     solve this, and how fast at best'). best_score and n_attempts aggregate across all
     rows for the task.
+
+    SCOPE NOTE: grouping is by (task_id, worker) only — it does NOT split on `track` or
+    `proposer`, and it takes the BEST run per task. So to compare two conditions (e.g.
+    feedback-aware vs plain `program.md`, or two tracks), score them from SEPARATE
+    --run-dirs and compare the summaries — do not pool both conditions into one dir and
+    expect this to separate them. That separation is the caller's job (the run-dir layout),
+    which is exactly how a before/after A/B is structured.
     """
     # group[(task, worker)] -> list of (attempt, score)
     groups: dict[tuple[str, str], list[tuple[int | None, float]]] = {}

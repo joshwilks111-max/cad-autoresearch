@@ -105,7 +105,7 @@ tasks:
     spec: spec.md                 # stub only; this is a drawing-track part (no hand-authored spec)
     drawing: drawing.png          # STC_06.pdf rasterised — the real input for this task
     default_track: drawing
-    holdout: true                 # locked eval set (real + hard, drawing-track); never tune on these
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_stc_06_asme1_ap242-e3.stp via make_ground_truth.py.
@@ -118,7 +118,7 @@ tasks:
     description: NIST PMI FTC-07 — AP242-e2 annotated part, 306 faces, 3 shells, bbox ~352 x 136 x 263 mm.
     spec: spec.md
     default_track: drawing
-    holdout: true                 # locked eval set (real + hard, drawing-track); never tune on these
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ftc_07_asme1_ap242-e2.stp via make_ground_truth.py.
@@ -130,7 +130,7 @@ tasks:
     description: NIST PMI FTC-09 — AP242-e1 annotated part, 163 faces, 6 shells, bbox ~227 x 5.3 x 279 mm (sheet-like).
     spec: spec.md
     default_track: drawing
-    holdout: true                 # locked eval set (real + hard, drawing-track); never tune on these
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ftc_09_asme1_ap242-e1.stp via make_ground_truth.py.
@@ -143,7 +143,7 @@ tasks:
     description: NIST PMI CTC-03 — AP242-e2 annotated part, 120 faces, bbox ~320 x 534 x 163 mm.
     spec: spec.md
     default_track: drawing
-    holdout: true                 # locked eval set (real + hard, drawing-track); never tune on these
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ctc_03_asme1_ap242-e2.stp via make_ground_truth.py.
@@ -155,7 +155,7 @@ tasks:
     description: NIST PMI CTC-05 — AP242-e1 annotated part, 156 faces, bbox ~527 x 559 x 483 mm (large).
     spec: spec.md
     default_track: drawing
-    holdout: true                 # locked eval set (real + hard, drawing-track); never tune on these
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ctc_05_asme1_ap242-e1.stp via make_ground_truth.py.

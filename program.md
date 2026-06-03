@@ -97,9 +97,10 @@ Each turn you get something like:
 - A **build failure** report includes the stderr tail — fix the actual error
   before trying anything ambitious.
 
-**The hint names ONE failure type — match the phrase, apply its fix.** "What to
-fix next" is generated from your scores, so it points at the single thing most
-worth changing. Don't fix everything at once; act on the named one:
+**The hints name your failure types — match each phrase, apply its fix.** "What to
+fix next" is generated from your scores; it may list one hint or several. Work the
+lowest-layer one first (a build failure before a missing feature, a missing feature
+before a fillet radius) — don't try to fix everything in a single turn:
 
 | If the hint says… | It means | Do this |
 | --- | --- | --- |

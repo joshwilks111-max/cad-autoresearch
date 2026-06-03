@@ -244,3 +244,15 @@ rules have already won.**
   nondeterminism that scopes the exclusion + motivates the parallel track.
 - Build state (2026-06-04): Rung 0 (`evals/turns_to_solve.py` + manifest `holdout`/`rotational_symmetry`
   fields) and Rung 1.5 (`program.md` feedback-aware section) are the first rungs built against this design.
+  Honest scope of what shipped:
+  - The held-out set is the 5 high-face-count NIST parts (`nist_stc_06`, `nist_ftc_07`, `nist_ftc_09`,
+    `nist_ctc_03` [medium-tier], `nist_ctc_05`) — real, floored below their grader cap. NOTE: only
+    `nist_stc_06` currently has a `drawing.png` asset; the other four are `default_track: drawing` in the
+    manifest but lack the rasterised drawing, so a true drawing-track A/B on them needs the assets sourced
+    first (own task). The face count makes them hard regardless of track.
+  - `holdout: true` is LIVE — `turns_to_solve.py:holdout_task_ids()` reads it. `rotational_symmetry: true`
+    is a MARKER, not yet consumed by any code: it replaces the review's "hand-kept round-part list"
+    maintenance trap with a queryable field, ready for the before/after gate that Rung 2+ will build. Until
+    then it is documentation of which parts hit the nondeterministic cylindrical-IoU path (issue #7).
+  - The scorer groups runs by `(task_id, worker)` and takes the best run; it does NOT split on `track`/
+    `proposer`. A before/after A/B separates conditions by SEPARATE `--run-dirs`, not by pooling into one.
