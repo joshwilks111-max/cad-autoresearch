@@ -91,6 +91,17 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
    grading (the hard one — verifying correctness without an answer-key STEP, which is what real
    engineering needs); a FreeCAD/CalculiX FEM + ocp-freecad-cam G-code "it's manufacturable" loop;
    a BYO-part + MCP grading server.
+8. **Metric-authoring skill (Software 3.0 for the grader).** Stop hand-patching `harness/geometry.py`
+   kernels (the round-part IoU has been fixed twice and a third degeneracy was suspected — the abstraction
+   keeps leaking, even though that third case did not reproduce when diagnosed; see issue #7). A
+   SKILL = (prompt + an accumulating property-based eval benchmark); an LLM GENERATES the deterministic
+   kernel OFFLINE, you iterate the PROMPT until it passes every invariant, then FREEZE the produced
+   python into `geometry.py`. Load-bearing: the LLM NEVER runs at grade time (determinism, limitations
+   #9), and the skill PROPOSES — a human approves the guarded merge. Codex's warning: the grader IS the
+   optimization target, so the benchmark must be property-based with adversarial false-positive cases,
+   not case-based (else an overfit kernel trains agents toward wrong geometry while showing green). Full
+   design: `docs/designs/metric-authoring-skill.md`. The `tasks/iou_benchmark/` property benchmark is
+   **not yet built** — it is the skill build session's first deliverable.
 
 ## Where the deep research lives
 
