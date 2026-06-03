@@ -16,8 +16,11 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
   deterministic IoU, Euler-χ in the topology signature, RNG restoration. The geometric reward is
   sound and robust; the frontier is breadth + the *engineering-correctness* and *authoring-feedback*
   axes, not the core geometry score.
-- **Round-part cylindrical IoU.** Rotation-invariant radius×axial occupancy. Fixed the false-low
-  IoU on annular parts (see limitations #2). Validated on FTC-11 + 3 synthetic round parts.
+- **Round-part cylindrical IoU (PARTIAL).** Rotation-invariant radius×axial occupancy. Fixed the
+  false-low IoU on high-aspect annular parts (FTC-11 + 3 synthetic round parts). **Still open for
+  low-aspect annuli** (e.g. bearing_608, ~3:1): the in-plane angular degeneracy makes the score
+  flip 1.00↔0.00 by mesh tessellation. Deferred fix = separate 1-D r and z histograms. See
+  limitations #2.
 - **Reward-honesty fixes.** (a) topology schema-mismatch returns neutral 0.5 instead of 0.0 when a
   mesh-proxy signature meets a B-rep GT signature (they share only euler, with different defs).
   (b) Adaptive feature-weighting (shift weight into iou+topology for feature-rich GTs, keyed on GT
