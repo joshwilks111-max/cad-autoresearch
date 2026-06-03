@@ -95,16 +95,28 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
    grading (the hard one — verifying correctness without an answer-key STEP, which is what real
    engineering needs); a FreeCAD/CalculiX FEM + ocp-freecad-cam G-code "it's manufacturable" loop;
    a BYO-part + MCP grading server.
-8. **Round-part IoU tolerant fix (the confirmed bug above).** `_cylindrical_iou`'s shared `rmax`
-   radial frame (`geometry.py:259`) is quantization-sensitive: two equal round annuli built different
-   ways score `iou=0.78` (reproduced, `scripts/iou_roundpart_diag.py`, issue #7). Fix = make the joint
-   (r,z) occupancy comparison tolerant to ±1-bin jitter via a **numpy-only ±1-bin dilation** of each
-   grid before IoU (verified to lift 0.78→0.93). NOT 1-D marginals (they false-positive on stepped
-   round parts — stepped_hub vs straight bushing). **Touches guarded `harness/geometry.py` — needs
-   explicit approval.** Acceptance: FTC-11 ≥0.956 + all round-part self-identity (=1.0) + the
-   Circle-vs-Ellipse pair ≥0.95 + no prismatic regression; lock with a property-based round-part test.
-   The original CEO+Codex+eng review plan specified exactly this; a flawed diagnostic briefly (and
-   wrongly) "retracted" it — see limitations #2 for the diagnostic-history lesson.
+8. **Metric-authoring skill (Software 3.0 for the grader).** Stop hand-patching `harness/geometry.py`
+   kernels (the round-part IoU has been fixed twice and a third degeneracy is now CONFIRMED — the
+   abstraction keeps leaking; see item 9 + issue #7). A SKILL = (prompt + an accumulating property-based
+   eval benchmark); an LLM GENERATES the deterministic kernel OFFLINE, you iterate the PROMPT until it
+   passes every invariant, then FREEZE the produced python into `geometry.py`. Load-bearing: the LLM
+   NEVER runs at grade time (determinism, limitations #9), and the skill PROPOSES — a human approves the
+   guarded merge. Codex's warning: the grader IS the optimization target, so the benchmark must be
+   property-based with adversarial false-positive cases, not case-based (else an overfit kernel trains
+   agents toward wrong geometry while showing green). Full design: `docs/designs/metric-authoring-skill.md`.
+   The `tasks/iou_benchmark/` property benchmark is **not yet built** — it is the skill build session's
+   first deliverable.
+9. **Round-part IoU tolerant fix (confirmed bug — limitations #2 / issue #7).** `_cylindrical_iou`'s
+   shared `rmax` radial frame (`geometry.py:259`) is quantization-sensitive: two equal round annuli built
+   different ways score `iou=0.78` (reproduced, `scripts/iou_roundpart_diag.py`). A ±1-bin dilation lifts
+   the CHUNKY case (bearing_608, ~3:1) 0.78→0.93 — but it BREAKS thin high-aspect washers (FTC-11 class,
+   ~15:1: wrong-bore scores HIGHER than correct), so the fix is **aspect-ratio-dependent and NOT yet
+   solved**. Real FTC-11 could not be verified GT-free (its GT is under `ground_truth/`), so the bug's
+   blast radius on solved parts is unknown. **Parked for a dedicated investigation + engineering-review
+   pass** — the issue #7 handoff comment has the full data + open design questions (aspect-aware binning?
+   density-normalized or banded radial comparison? does real FTC-11 even regress?). NOT 1-D marginals
+   (they false-positive on stepped parts). Touches guarded `harness/geometry.py` — needs explicit
+   approval once a cross-aspect fix is found.
 
 ## Where the deep research lives
 

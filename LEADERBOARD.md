@@ -1,35 +1,53 @@
-# Grid Run Leaderboard — first run of the completed harness (2026-05-30)
+# Grid Run Leaderboard — live Opus spec grid (2026-06-03)
 
-First real grid run across all tasks, then the round-part IoU fix + two reward-honesty
-fixes (2026-05-30). On-subscription (mock proposer + grading only; no API/claude
-proposer, no orchestrator/watcher). 9/17 tasks solved >= 0.95 (mean composite of solved
-= 0.9925). Reproducible from each task's `tasks/<id>/best_candidate.py`.
+**Spec track: 13/13 tasks solved ≥ 0.95** in a staged live `claude -p` Opus grid (base commit
+`431c2e6`, the PR #6 merge — itself post the PR #5 `8f14e8a` harness fix), on-subscription (OAuth;
+`ANTHROPIC_API_KEY` scrubbed). Both
+genuinely-open parts solved this run (`hex_bolt` 0.344→0.998, `trial_lbracket` 0.886→0.976), each
+via a `program.md` prompt hint. Two spec-less tasks (`thinwall_box`, `twin_bodies`) got authored
+specs and solved.
 
-| Rank | Task | Tier | Track | Composite | GT faces | Status |
+**Provenance (read this before trusting a number).** Per-task bests below come from the **live-grid
+session ledgers** (`runs/<session>/leaderboard.json` + the gbrain run page
+`reference-live-grid-2026-06-03-twelve-of-thirteen`) — they are **NOT** committed `tasks/<id>/.best_score`
+files (those don't exist yet for this run). The `Source` column marks each row: `live-2026-06-03`
+(this grid, spec track) vs `mock-2026-05-30` (the earlier mock-proposer grading-only run, retained
+for the hard drawing-track parts the live grid did not exercise). To make a row reproducible-from-repo,
+re-run that task and commit its `.best_score` + `best_candidate.py`.
+
+| Task | Tier | Track | Composite | GT faces | Status | Source |
 |---|---|---|---|---|---|---|
-| 1 | rib_probe | easy | spec | 0.999 | 66 | solved |
-| 2 | perf_plate | easy | spec | 0.998 | 21 | solved |
-| 3 | bearing_608 | easy | spec | 0.997 | 4 | solved (real, 608 bearing ring) |
-| 4 | sample_bracket | easy | spec | 0.997 | 15 | solved |
-| 5 | stepped_hub | easy | spec | 0.997 | 7 | solved (round) |
-| 6 | twin_bodies | easy | spec | 0.997 | 12 | solved |
-| 7 | motor_mount | easy | spec | 0.996 | 15 | solved |
-| 8 | thinwall_box | easy | spec | 0.993 | 11 | solved |
-| 9 | nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, NIST plate) |
-| 10 | nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) |
-| 11 | nist_ctc_05 | hard | drawing | 0.688 | 156 | real partial (geometry-near-best; topology+angular capped) |
-| 12 | nist_stc_06 | hard | drawing | 0.628 | 144 | real partial (drawing track) |
-| - | pulley_vgroove | easy | spec | 0.560b | 13 | scaffolded (round, baseline) |
-| - | slotted_ring | easy | spec | 0.415b | 33 | scaffolded (round, baseline) |
-| - | flanged_bushing | easy | spec | 0.316b | 10 | scaffolded (round, baseline) |
-| - | nist_ftc_07 | hard | drawing | ~0.24b | 306 | bbox baseline (3 shells, multibody) |
-| - | nist_ctc_03 | medium | drawing | ~0.17b | 120 | bbox baseline (thin-wall lattice) |
+| rib_probe | easy | spec | 0.999 | 66 | solved | live-2026-06-03 |
+| hex_bolt | easy | spec | **0.998** | — | solved (NEW this run) | live-2026-06-03 |
+| perf_plate | easy | spec | 0.998 | 21 | solved | live-2026-06-03 |
+| slotted_ring | easy | spec | 0.997 | 33 | solved (round) | live-2026-06-03 |
+| stepped_hub | easy | spec | 0.997 | 7 | solved (round) | live-2026-06-03 |
+| twin_bodies | easy | spec | 0.997 | 12 | solved (authored spec) | live-2026-06-03 |
+| pulley_vgroove | easy | spec | 0.996 | 13 | solved (round) | live-2026-06-03 |
+| motor_mount | easy | spec | 0.996 | 15 | solved | live-2026-06-03 |
+| bearing_608 | easy | spec | 0.996 | 4 | solved (real, 608 ring) ¹ | live-2026-06-03 |
+| flanged_bushing | easy | spec | 0.995 | 10 | solved (round) | live-2026-06-03 |
+| thinwall_box | easy | spec | 0.993 | 11 | solved (authored spec) | live-2026-06-03 |
+| trial_lbracket | easy | spec | 0.976 | — | solved (single-L-profile hint) | live-2026-06-03 |
+| sample_bracket | easy | spec | 0.962 | 15 | solved | live-2026-06-03 |
+| nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, NIST plate ~63×63×3) | mock-2026-05-30 |
+| nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) | mock-2026-05-30 |
+| nist_ctc_05 | hard | drawing | 0.688 | 156 | real partial (topology+angular capped) | mock-2026-05-30 |
+| nist_stc_06 | hard | drawing | 0.628 | 144 | real partial (drawing track) | mock-2026-05-30 |
+| nist_ftc_07 | hard | drawing | ~0.24b | 306 | bbox baseline (3 shells, multibody) | mock-2026-05-30 |
+| nist_ctc_03 | medium | drawing | ~0.17b | 120 | bbox baseline (thin-wall lattice) | mock-2026-05-30 |
 
-`b` = baseline only (featureless box/cylinder; no real reconstruction yet). The 3
-`*_vgroove/_ring/_bushing` round parts are scaffolded + confirmed on the cylindrical-IoU
-path, all reachable to >=0.95 — they are queued quick wins. The 2 remaining `nist_*`
-hard parts (ftc_07, ctc_03) are bbox baselines; ftc_07 is a 3-shell multibody (OCC
-fragment hazard) and ctc_03 a 1.4%-fill thin-wall lattice (euler=95) — both deferred.
+¹ **bearing_608 round-part IoU caveat** — its score is sound, but the cylindrical-IoU path has a known
+low-aspect-annulus degeneracy (a correct build can score iou 1.00 or 0.00 by mesh tessellation): see
+`docs/known-limitations.md` §2 and [issue #7](https://github.com/joshwilks111-max/cad-autoresearch/issues/7).
+**This footnote is removed when the round-part IoU fix lands** (that PR resolves the degeneracy).
+
+`b` = baseline only (featureless box/cylinder; no real reconstruction yet). The hard `nist_*` drawing-track
+parts were NOT in the 2026-06-03 spec grid; their numbers are the 2026-05-30 mock run. `ftc_07` is a 3-shell
+multibody (OCC fragment hazard); `ctc_03` a 1.4%-fill thin-wall lattice (euler=95) — both deferred.
+Earlier history: the first completed-harness run (2026-05-30, mock proposer, grading only) solved 9/17 and
+listed `pulley_vgroove`/`slotted_ring`/`flanged_bushing` as scaffolded 0.3–0.5 baselines — all three are now
+solved 0.995–0.997 on the live grid.
 
 **nist_ctc_05 (0.688, real partial — geometry-near-best, topology+angular capped):** a
 large coaxial stepped turning / flanged housing (Ø558.8 base flange, Ø304.8 tower,
@@ -60,17 +78,20 @@ only layer sensitive to missing holes (chamfer/SIoU are floor-blind), so for
 feature-rich GTs (high face count) weight shifts from the blind surface layers toward
 IoU+topology. Both verified zero-regression on the solved suite; 10/10 tests pass.
 
-**bearing_608 (0.997, SOLVED — second solved REAL part):** the envelope of a standard
+**bearing_608 (0.996 live / 0.997 mock, SOLVED — second solved REAL part):** the envelope of a standard
 608 bearing (ISO size OD22 / bore8 / width7 mm) — a simple annular ring. A real part
 (dimensions verified against a public downloaded STEP, then the GT is rebuilt from the
 standard dimensions in `make_ground_truth.py` so nothing third-party is redistributed).
-Reconstructed first-try as `Cylinder(r11,h7) - Cylinder(r4,h7)`: vol/bbox/topo/iou all
-1.000, only chamfer 0.983 (sampling floor). It scores ABOVE FTC-11 (0.956) because its
-4-face B-rep graph matches the GT exactly (topo 1.000) — FTC-11's only gap was a
-seam-edge convention. Added after confirming the NIST suite has NO other low-face real
-part: every NIST case except FTC-11 is 117-270 faces and topology-capped ~0.88 (verified
-across CTC-01/03/05, FTC-06/07/08/09/10, STC-06). The route to a SOLVED real part is a
-genuinely low-face part, which the cylindrical-IoU path then nails.
+Reconstructed as `Cylinder(r11,h7) - Cylinder(r4,h7)`: vol/bbox/topo all 1.000, chamfer 0.983
+(sampling floor). It scores ABOVE FTC-11 (0.956) because its 4-face B-rep graph matches the GT
+exactly (topo 1.000) — FTC-11's only gap was a seam-edge convention. Added after confirming the
+NIST suite has NO other low-face real part: every NIST case except FTC-11 is 117-270 faces and
+topology-capped ~0.88 (verified across CTC-01/03/05, FTC-06/07/08/09/10, STC-06).
+**Round-part IoU caveat:** this `Cylinder − Cylinder` construction is the exact case in
+[issue #7](https://github.com/joshwilks111-max/cad-autoresearch/issues/7) — its IoU is 1.00 on a
+consistently-tessellated mesh but can degenerate to 0.00 vs an equivalent `Circle − Circle` build,
+a known low-aspect-annulus bug in the cylindrical-IoU path (`docs/known-limitations.md` §2), not a
+reconstruction error. The score above is from the good-tessellation case.
 
 **nist_ftc_09** is a real SPEC-track reconstruction (a perforated plate: 29 holes +
 window + slots, authored from measuring the part), 0.258 -> 0.758. It is topology-capped:
