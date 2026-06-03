@@ -58,11 +58,25 @@ A rotationally-symmetric solid (washer, bushing, bearing) has an **arbitrary in-
 frame** — the 48-transform voxel-IoU alignment search can't lock its rotation, so a perfect
 round part scored a false-low volumetric IoU (~0.62) for a long time.
 
-- **Fix (shipped):** `geometry._is_rotationally_symmetric` (two near-equal PCA eigenvalues
-  within tolerance) routes round parts to `_cylindrical_iou` — radius × axial occupancy
-  about the symmetry axis, with a shared (r, z) frame + axial-sign search. FTC-11 washer
-  IoU 0.619 → 0.986; it became the first solved real NIST part purely from this reward-bug fix
-  (the candidate was byte-identical).
+- **Fix (partial — shipped):** `geometry._is_rotationally_symmetric` (two near-equal PCA
+  eigenvalues within tolerance) routes round parts to `_cylindrical_iou` — radius × axial
+  occupancy about the symmetry axis, with a shared (r, z) frame + axial-sign search. FTC-11
+  washer IoU 0.619 → 0.986; it became the first solved real NIST part purely from this
+  reward-bug fix (the candidate was byte-identical).
+- **NOT fully resolved — low-aspect annuli (reproduced 2026-06-03).** The fix handles the
+  axial-SIGN ambiguity but NOT the in-plane ANGULAR degeneracy. For a near-cubic annulus
+  (e.g. `bearing_608`, OD22 × width7, ~3:1) the two in-plane radial eigenvalues are within
+  ~3% (top-2 ratio 0.967), so the radial-histogram binning grid origin depends on the mesh's
+  angular tessellation offset — which differs between two independently-built meshes of the
+  SAME solid. Observed in a live grid: two workers each modelled `bearing_608` correctly via
+  different code paths (`Circle−Circle extrude` vs `Cylinder−Cylinder`); one scored iou=1.00,
+  the other **iou=0.00**, on byte-equal geometry. GT-free isolation: `iou(w0,w1)=0.0`,
+  self-IoU 1.0 for both. The flip is DETERMINISTIC per mesh (iou() is seeded), not RNG — it's
+  the representation, not run-to-run noise. FTC-11's fix was verified on a consistently-
+  tessellated mesh pair, so it never exercised this. **Proper fix (deferred, guarded):** make
+  the radial comparison angular-offset-invariant — bin r and z into two SEPARATE 1-D
+  histograms and IoU each (removes the joint-grid origin sensitivity entirely); re-verify
+  FTC-11 0.956 + all round-part self-identity + no prismatic regression before shipping.
 - **Landmine:** the symmetry detector mis-routes **near-equal-extent prismatic parts** (e.g.
   a part that is coincidentally ~square in two axes). For the time-trial part this was avoided
   by choosing DISTINCT extents (120/60/44, eigenvalue ratios 1:2.8:13) so it takes the voxel
