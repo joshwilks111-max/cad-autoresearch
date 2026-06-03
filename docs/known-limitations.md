@@ -63,20 +63,28 @@ round part scored a false-low volumetric IoU (~0.62) for a long time.
   occupancy about the symmetry axis, with a shared (r, z) frame + axial-sign search. FTC-11
   washer IoU 0.619 → 0.986; it became the first solved real NIST part purely from this
   reward-bug fix (the candidate was byte-identical).
-- **NOT fully resolved — low-aspect annuli (reproduced 2026-06-03).** The fix handles the
-  axial-SIGN ambiguity but NOT the in-plane ANGULAR degeneracy. For a near-cubic annulus
-  (e.g. `bearing_608`, OD22 × width7, ~3:1) the two in-plane radial eigenvalues are within
-  ~3% (top-2 ratio 0.967), so the radial-histogram binning grid origin depends on the mesh's
-  angular tessellation offset — which differs between two independently-built meshes of the
-  SAME solid. Observed in a live grid: two workers each modelled `bearing_608` correctly via
-  different code paths (`Circle−Circle extrude` vs `Cylinder−Cylinder`); one scored iou=1.00,
-  the other **iou=0.00**, on byte-equal geometry. GT-free isolation: `iou(w0,w1)=0.0`,
-  self-IoU 1.0 for both. The flip is DETERMINISTIC per mesh (iou() is seeded), not RNG — it's
-  the representation, not run-to-run noise. FTC-11's fix was verified on a consistently-
-  tessellated mesh pair, so it never exercised this. **Proper fix (deferred, guarded):** make
-  the radial comparison angular-offset-invariant — bin r and z into two SEPARATE 1-D
-  histograms and IoU each (removes the joint-grid origin sensitivity entirely); re-verify
-  FTC-11 0.956 + all round-part self-identity + no prismatic regression before shipping.
+- **Suspected low-aspect-annulus degeneracy — INVESTIGATED 2026-06-03, DOES NOT REPRODUCE.**
+  A live grid showed two workers modelling `bearing_608` and scoring iou=1.00 vs **iou=0.00**;
+  the note at the time attributed it to an in-plane ANGULAR degeneracy in `_cylindrical_iou`
+  (two near-equal radial eigenvalues → the binning grid origin depending on angular tessellation
+  offset, claimed to differ between "two independently-built meshes of the SAME solid"). **A
+  direct diagnostic (`runs/_iou_roundpart_diag.py`, issue #7) could not reproduce it.** Built
+  `bearing_608` both ways (`Circle−Circle extrude` vs `Cylinder−Cylinder`) through the real
+  grader: build123d lowers BOTH constructions to **byte-identical** 504-vertex meshes, so
+  `iou(A,B)=1.0000` at every tessellation tol (0.5 → 0.005), with mismatched tols, and even for
+  genuinely near-cubic annuli (in-plane eigenvalue ratio 0.83–0.99, spanning the cited 0.967).
+  Branch agreement holds (both route cylindrical); the symmetry axis is stable (0.000° between
+  meshes). **The documented mechanism is wrong** — the "two different meshes of the same solid"
+  precondition never occurs from these build paths, and "byte-equal geometry" was never
+  instrumented (it was an unverified assumption). The 0.00 was a REAL observation but its cause
+  is **unconfirmed**: most likely a genuinely non-equal candidate (a stray `Rotation` / wrong
+  axis alignment), a non-watertight solid hitting the Monte-Carlo `sample_volume` fallback
+  (`geometry.iou` ~line 339), or a since-fixed harness path (PR #5/#6 touched the runner). **No
+  fix shipped** — the previously-prescribed "two separate 1-D histograms" fix is RETRACTED: it
+  addresses a non-existent degeneracy AND would false-positive on stepped round parts (a tolerant
+  2-D comparison would be the shape of a fix IF a real cause is ever found). **Open follow-up:**
+  find the actual cause of the live-grid 0.00 (issue #7) — likely needs the original worker's
+  candidate STL, not a clean rebuild. Until then `_cylindrical_iou` is not known to be broken.
 - **Landmine:** the symmetry detector mis-routes **near-equal-extent prismatic parts** (e.g.
   a part that is coincidentally ~square in two axes). For the time-trial part this was avoided
   by choosing DISTINCT extents (120/60/44, eigenvalue ratios 1:2.8:13) so it takes the voxel

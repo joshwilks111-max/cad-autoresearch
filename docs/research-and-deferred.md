@@ -16,11 +16,14 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
   deterministic IoU, Euler-χ in the topology signature, RNG restoration. The geometric reward is
   sound and robust; the frontier is breadth + the *engineering-correctness* and *authoring-feedback*
   axes, not the core geometry score.
-- **Round-part cylindrical IoU (PARTIAL).** Rotation-invariant radius×axial occupancy. Fixed the
-  false-low IoU on high-aspect annular parts (FTC-11 + 3 synthetic round parts). **Still open for
-  low-aspect annuli** (e.g. bearing_608, ~3:1): the in-plane angular degeneracy makes the score
-  flip 1.00↔0.00 by mesh tessellation. Deferred fix = separate 1-D r and z histograms. See
-  limitations #2.
+- **Round-part cylindrical IoU.** Rotation-invariant radius×axial occupancy. Fixed the false-low
+  IoU on high-aspect annular parts (FTC-11 + 3 synthetic round parts). A 2026-06-03 live grid
+  showed a `bearing_608` 1.00↔0.00 split attributed to an in-plane angular degeneracy — but a
+  direct diagnostic (`runs/_iou_roundpart_diag.py`, issue #7) **could not reproduce it**: both
+  build paths lower to byte-identical meshes (`iou=1.0` at every tessellation). The documented
+  mechanism is wrong and the "1-D histograms" fix is retracted (see limitations #2). **Open
+  (not a known bug):** find the actual cause of the live-grid 0.00 — likely a non-equal candidate
+  or the Monte-Carlo fallback, not the cylindrical metric.
 - **Reward-honesty fixes.** (a) topology schema-mismatch returns neutral 0.5 instead of 0.0 when a
   mesh-proxy signature meets a B-rep GT signature (they share only euler, with different defs).
   (b) Adaptive feature-weighting (shift weight into iou+topology for feature-rich GTs, keyed on GT
