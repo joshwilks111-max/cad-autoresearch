@@ -16,14 +16,15 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
   deterministic IoU, Euler-χ in the topology signature, RNG restoration. The geometric reward is
   sound and robust; the frontier is breadth + the *engineering-correctness* and *authoring-feedback*
   axes, not the core geometry score.
-- **Round-part cylindrical IoU.** Rotation-invariant radius×axial occupancy. Fixed the false-low
-  IoU on high-aspect annular parts (FTC-11 + 3 synthetic round parts). A 2026-06-03 live grid
-  showed a `bearing_608` 1.00↔0.00 split attributed to an in-plane angular degeneracy — but a
-  direct diagnostic (`runs/_iou_roundpart_diag.py`, issue #7) **could not reproduce it**: both
-  build paths lower to byte-identical meshes (`iou=1.0` at every tessellation). The documented
-  mechanism is wrong and the "1-D histograms" fix is retracted (see limitations #2). **Open
-  (not a known bug):** find the actual cause of the live-grid 0.00 — likely a non-equal candidate
-  or the Monte-Carlo fallback, not the cylindrical metric.
+- **Round-part cylindrical IoU (PARTIAL — a real bug remains, confirmed 2026-06-03).** Rotation-
+  invariant radius×axial occupancy fixed the false-low IoU on high-aspect annular parts (FTC-11 + 3
+  synthetic round parts). **Still broken — radial-frame quantization:** two equal round annuli built
+  different ways (`Circle` vs `Ellipse(11,11)`) tessellate differently and score `iou=0.7826` through
+  the real grader (reproduced in `scripts/iou_roundpart_diag.py`, issue #7). Root cause = the sampled
+  shared `rmax` at `geometry.py:259`; a sub-micron `r.max()` delta shifts all radial bins (axis is
+  stable — NOT an angular/axis bug). Fix = tolerant joint (r,z) comparison (numpy ±1-bin dilation,
+  verified to recover 0.78→0.93); NOT 1-D marginals (they false-positive on stepped parts). Guarded —
+  needs approval. See the deferred entry below + limitations #2.
 - **Reward-honesty fixes.** (a) topology schema-mismatch returns neutral 0.5 instead of 0.0 when a
   mesh-proxy signature meets a B-rep GT signature (they share only euler, with different defs).
   (b) Adaptive feature-weighting (shift weight into iou+topology for feature-rich GTs, keyed on GT
@@ -94,6 +95,16 @@ Explanation doc. See also [known-limitations.md](known-limitations.md) (the trap
    grading (the hard one — verifying correctness without an answer-key STEP, which is what real
    engineering needs); a FreeCAD/CalculiX FEM + ocp-freecad-cam G-code "it's manufacturable" loop;
    a BYO-part + MCP grading server.
+8. **Round-part IoU tolerant fix (the confirmed bug above).** `_cylindrical_iou`'s shared `rmax`
+   radial frame (`geometry.py:259`) is quantization-sensitive: two equal round annuli built different
+   ways score `iou=0.78` (reproduced, `scripts/iou_roundpart_diag.py`, issue #7). Fix = make the joint
+   (r,z) occupancy comparison tolerant to ±1-bin jitter via a **numpy-only ±1-bin dilation** of each
+   grid before IoU (verified to lift 0.78→0.93). NOT 1-D marginals (they false-positive on stepped
+   round parts — stepped_hub vs straight bushing). **Touches guarded `harness/geometry.py` — needs
+   explicit approval.** Acceptance: FTC-11 ≥0.956 + all round-part self-identity (=1.0) + the
+   Circle-vs-Ellipse pair ≥0.95 + no prismatic regression; lock with a property-based round-part test.
+   The original CEO+Codex+eng review plan specified exactly this; a flawed diagnostic briefly (and
+   wrongly) "retracted" it — see limitations #2 for the diagnostic-history lesson.
 
 ## Where the deep research lives
 

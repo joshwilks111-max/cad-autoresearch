@@ -63,28 +63,31 @@ round part scored a false-low volumetric IoU (~0.62) for a long time.
   occupancy about the symmetry axis, with a shared (r, z) frame + axial-sign search. FTC-11
   washer IoU 0.619 → 0.986; it became the first solved real NIST part purely from this
   reward-bug fix (the candidate was byte-identical).
-- **Suspected low-aspect-annulus degeneracy — INVESTIGATED 2026-06-03, DOES NOT REPRODUCE.**
-  A live grid showed two workers modelling `bearing_608` and scoring iou=1.00 vs **iou=0.00**;
-  the note at the time attributed it to an in-plane ANGULAR degeneracy in `_cylindrical_iou`
-  (two near-equal radial eigenvalues → the binning grid origin depending on angular tessellation
-  offset, claimed to differ between "two independently-built meshes of the SAME solid"). **A
-  direct diagnostic (`runs/_iou_roundpart_diag.py`, issue #7) could not reproduce it.** Built
-  `bearing_608` both ways (`Circle−Circle extrude` vs `Cylinder−Cylinder`) through the real
-  grader: build123d lowers BOTH constructions to **byte-identical** 504-vertex meshes, so
-  `iou(A,B)=1.0000` at every tessellation tol (0.5 → 0.005), with mismatched tols, and even for
-  genuinely near-cubic annuli (in-plane eigenvalue ratio 0.83–0.99, spanning the cited 0.967).
-  Branch agreement holds (both route cylindrical); the symmetry axis is stable (0.000° between
-  meshes). **The documented mechanism is wrong** — the "two different meshes of the same solid"
-  precondition never occurs from these build paths, and "byte-equal geometry" was never
-  instrumented (it was an unverified assumption). The 0.00 was a REAL observation but its cause
-  is **unconfirmed**: most likely a genuinely non-equal candidate (a stray `Rotation` / wrong
-  axis alignment), a non-watertight solid hitting the Monte-Carlo `sample_volume` fallback
-  (`geometry.iou` ~line 339), or a since-fixed harness path (PR #5/#6 touched the runner). **No
-  fix shipped** — the previously-prescribed "two separate 1-D histograms" fix is RETRACTED: it
-  addresses a non-existent degeneracy AND would false-positive on stepped round parts (a tolerant
-  2-D comparison would be the shape of a fix IF a real cause is ever found). **Open follow-up:**
-  find the actual cause of the live-grid 0.00 (issue #7) — likely needs the original worker's
-  candidate STL, not a clean rebuild. Until then `_cylindrical_iou` is not known to be broken.
+- **NOT fully resolved — radial-frame quantization (CONFIRMED 2026-06-03, root cause corrected).**
+  A round part can score a degraded IoU against an equivalent build of the SAME solid. The bug is
+  REPRODUCED through the real grader (`scripts/iou_roundpart_diag.py`, issue #7): two perfectly-round
+  annuli of identical OD/bore/width built different ways (`Circle` vs `Ellipse(11,11)` — a circle as
+  an equal-radii ellipse) tessellate differently (504 vs 530 verts) and score
+  **`iou = 0.7826`** (deterministic, 5/5 repeats; self-IoU 1.0 each; both routed to `_cylindrical_iou`).
+  **Root cause (measured):** the radial frame `rmax = max(ra.max(), rb.max())` (`geometry.py:259`) is
+  derived from the SAMPLED point clouds; a sub-micron difference in `r.max()` between two tessellations
+  (`Δrmax = 0.000583 mm` here) shifts every one of the 64 radial bin edges (`ri = r/rmax·(nbins-1)`), so
+  identical material lands in different bins and the joint-grid IoU collapses. The symmetry **axis is
+  STABLE** (0.000° between the two clouds) — this is a **binning-quantization** bug, NOT the in-plane
+  ANGULAR degeneracy the original note guessed, and NOT axis instability. (The live grid's 1.00↔0.00
+  was a more severe instance of the same mechanism.)
+  **Diagnostic history (do not repeat):** the FIRST diagnostic built `bearing_608` as `Circle−Circle`
+  vs `Cylinder−Cylinder` and wrongly concluded "does not reproduce" — those two primitives lower to
+  BYTE-IDENTICAL meshes (both 504 verts), so it never created the "two DIFFERENT meshes of one solid"
+  condition the bug needs. Lesson: to test this class of bug you must build the same solid a way that
+  actually produces a different tessellation (vertex count differs).
+  **Fix (the plan's tolerant-2-D, VERIFIED to recover):** make the joint (r,z) comparison tolerant to
+  ±1-bin jitter — a numpy-only ±1-bin dilation of each occupancy grid before IoU. Measured: it lifts
+  `iou 0.7826 → 0.9310`. (Do NOT use 1-D marginals — they false-positive on stepped round parts.) This
+  is a GUARDED change to `harness/geometry.py`; needs explicit approval. Acceptance: re-verify FTC-11
+  ≥0.956 + all round-part self-identity (=1.0) + the Circle-vs-Ellipse pair ≥0.95 + no prismatic
+  regression. **Open:** the live grid's full 0.00 (vs this 0.78) may need the original worker's candidate
+  STL to reproduce the extreme; the tolerant fix addresses the mechanism regardless.
 - **Landmine:** the symmetry detector mis-routes **near-equal-extent prismatic parts** (e.g.
   a part that is coincidentally ~square in two axes). For the time-trial part this was avoided
   by choosing DISTINCT extents (120/60/44, eigenvalue ratios 1:2.8:13) so it takes the voxel
