@@ -148,6 +148,58 @@ Polarity is the #1 silent error: a feature that should remove material must use
 `Mode.SUBTRACT` (or `Hole`, which subtracts). If your volume comes back *over*
 ground truth, you probably added where you should have cut.
 
+### When a chamfer/fillet build FAILS ("Failed creating a chamfer, try a smaller length")
+
+This OCC error has two common causes, so fix them in cost order:
+
+1. **The length really is too big** for the local geometry — a chamfer/fillet
+   bigger than the adjacent face width, a short edge, a nearby hole, or a concave
+   corner. This is the CHEAP check: try a smaller length once. If it now builds,
+   you're done.
+2. **The selector grabbed the wrong edges** — if shrinking the length does NOT
+   help (it still fails at 0.4, 0.2), the edge is the problem, not the size. A
+   frequent culprit is an edge at a *fusion junction* (where two bodies were
+   joined and one face was consumed): after the fuse it may be partially interior,
+   which OCC often cannot chamfer. Re-pick instead of shrinking further.
+
+- **Re-pick the edges** (when smaller-length didn't help). Select the edge by an
+  *unambiguous* geometric predicate (a specific `group_by(Axis.Z)` band AND a
+  `filter_by` on type/position), and prefer edges on a *free outer boundary* over
+  an internal junction. Verify the selection (render it / count it) before
+  re-applying.
+- **An "optional" or "flavour" feature is not worth a failed build.** If the spec
+  marks a small chamfer/fillet as optional and it keeps breaking the build, **drop
+  it and ship the rest** — a body=0 (build failure) scores **0 overall**, whereas
+  omitting one small chamfer costs only a sliver of the topology + chamfer layers.
+  A watertight part missing one optional bevel beats a part that won't build. Add
+  the optional feature back only once the rest is solving ≥ target.
+
+### When topology is stuck (faces/edges a little OVER ground truth) but geometry is right
+
+If `vol` and `bbox` are ~1.0 and the renders look correct, yet `topo` is stuck
+(your face/edge count is a few ABOVE GT — e.g. faces 19 vs 17), a frequent cause is
+**fusion seams**: when you build a feature as a *separate body* and ADD/fuse it onto
+another, OCC can leave a seam edge that splits one logical face into two, inflating
+the count (it can also come from split sketch wires, boolean history, or a feature
+modelled as a different surface type than GT — so confirm with the renders + the
+topology delta first). When the exporter merges coplanar seams on the GT side but
+your in-memory part keeps them, you read a couple of faces high. To close it:
+
+- **Build naturally-continuous geometry as ONE sketch, not several fused bodies.**
+  E.g. an L-bracket's base plate + upright wall share the full part width — model
+  them as a single **L-shaped profile** (a sketch on the side plane) **extruded
+  along the shared axis**, so the plate↔wall junction is one continuous solid with
+  NO fuse seam. Only genuinely-separate features (a narrow centred gusset rib, a
+  boss) remain as added bodies.
+- **Make abutting faces EXACTLY coplanar.** A gusset/rib whose flat side is meant to
+  lie flush with a wall face must sit on *exactly* that plane (same coordinate, no
+  0.01 mm gap or overlap) — exact coincidence lets OCC merge the faces; a sliver gap
+  leaves a seam. Double-check the rib's corner coordinates against the host faces.
+- This is worth one or two deliberate attempts when `topo` is the lowest layer and
+  everything else is solved — but if `iou` is ALSO low on a part with a diagonal or
+  rounded feature, part of that gap is the grader's sampling resolution, not your
+  model; don't burn the whole budget chasing the last face.
+
 ## Mindset
 
 - **Verifiable reward, so be empirical.** Don't argue with the score; change the
