@@ -48,7 +48,19 @@ from typing import Any
 # The project's "solved" line: composite >= this is a clean reconstruction.
 DEFAULT_BAR = 0.95
 
+# "no usable score" sentinel — below any real composite in [0,1], so a row with a
+# missing/malformed score can never count as solved. Intentionally matches
+# Ledger.best()'s -1.0 unseen-task sentinel (loop/ledger.py:43).
+_NO_SCORE = -1.0
+
 _REPO = Path(__file__).resolve().parent.parent
+
+
+def _is_number(x) -> bool:
+    """True for a real int/float, False for bool (which is an int subclass) and
+    everything else. Used to defend row accessors against malformed JSON values —
+    the bool exclusion is load-bearing (a JSON `true` must NOT read as 1)."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
 
 
 # --------------------------------------------------------------------------- #
@@ -83,18 +95,16 @@ def find_ledgers(run_dir: str | Path) -> list[Path]:
 
 def _row_score(rec: dict) -> float:
     """Top-level composite score for a row. Always present in a real row; defended
-    anyway (returns -1.0 if absent/non-numeric so it can never be 'solved')."""
+    anyway (returns _NO_SCORE if absent/non-numeric so it can never be 'solved')."""
     s = rec.get("score")
-    if isinstance(s, (int, float)) and not isinstance(s, bool):
-        return float(s)
-    return -1.0
+    return float(s) if _is_number(s) else _NO_SCORE
 
 
 def _row_attempt(rec: dict) -> int | None:
+    """Attempt number for a row, or None if absent/non-int. A JSON bool is rejected
+    (not coerced to 1) so a `true` attempt can't masquerade as the first turn."""
     a = rec.get("attempt")
-    if isinstance(a, int) and not isinstance(a, bool):
-        return a
-    return None
+    return a if _is_number(a) and isinstance(a, int) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -167,7 +177,7 @@ def score_rows(rows: list[dict], *, bar: float = DEFAULT_BAR) -> dict[str, TaskR
             task_id=tid,
             solved=first is not None,
             first_solved_attempt=first,
-            best_score=max(scores) if scores else -1.0,
+            best_score=max(scores) if scores else _NO_SCORE,
             n_attempts=len(scores),
             n_runs=len(task_workers.get(tid, set())),
             bar=bar,

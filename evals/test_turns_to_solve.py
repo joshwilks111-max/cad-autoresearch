@@ -34,6 +34,8 @@ for _p in (str(_HERE), str(_REPO)):
 
 from turns_to_solve import (  # noqa: E402
     DEFAULT_BAR,
+    _render,
+    find_ledgers,
     holdout_task_ids,
     read_ledger_rows,
     score_rows,
@@ -278,3 +280,89 @@ def test_holdout_only_restricts_scoring(tmp_path):
 
 def test_default_bar_constant():
     assert DEFAULT_BAR == 0.95
+
+
+# --------------------------------------------------------------------------- #
+#  CLI render + missing-dir guards + JSON contract (review-hardening)
+# --------------------------------------------------------------------------- #
+def test_render_emits_both_solved_and_unsolved_rows():
+    rows = [_ok_row("solved_one", "w", 3, 0.99),
+            _ok_row("unsolved_one", "w", 2, 0.10)]
+    out = _render(summarize(score_rows(rows, bar=DEFAULT_BAR), bar=DEFAULT_BAR))
+    assert "TURNS-TO-SOLVE" in out
+    assert "solved_one" in out and "yes" in out and "3" in out
+    # the unsolved row renders a dash for turns, not a number
+    line = next(ln for ln in out.splitlines() if "unsolved_one" in ln)
+    assert "no" in line and "-" in line
+
+
+def test_render_empty_summary_does_not_crash(tmp_path):
+    out = _render(score_run_dir(tmp_path / "definitely_missing", bar=DEFAULT_BAR))
+    assert "tasks=0" in out
+
+
+def test_missing_run_dir_degrades_to_empty(tmp_path):
+    missing = tmp_path / "nope"
+    assert find_ledgers(missing) == []
+    assert read_ledger_rows(missing / "ledger.jsonl") == []
+    s = score_run_dir(missing, bar=DEFAULT_BAR)
+    assert s.n_tasks == 0
+    assert s.solve_rate == 0.0
+    assert s.median_turns_to_solve is None
+
+
+def test_bool_attempt_on_passing_row_reads_unsolved():
+    # attempt=True must NOT be treated as attempt 1 even though score crosses the bar
+    res = score_rows([{"task_id": "t", "worker": "w", "attempt": True, "score": 0.99}],
+                     bar=DEFAULT_BAR)
+    assert res["t"].solved is False
+    assert res["t"].first_solved_attempt is None
+    assert res["t"].best_score == pytest.approx(0.99)
+
+
+def test_missing_attempt_on_passing_row_reads_unsolved():
+    res = score_rows([{"task_id": "t", "worker": "w", "score": 0.99}], bar=DEFAULT_BAR)
+    assert res["t"].solved is False
+    assert res["t"].first_solved_attempt is None
+
+
+def test_summary_as_dict_contract_and_sort():
+    rows = [_ok_row("zeta", "w", 2, 0.991234), _ok_row("alpha", "w", 1, 0.10)]
+    d = summarize(score_rows(rows, bar=DEFAULT_BAR), bar=DEFAULT_BAR).as_dict()
+    assert set(d) == {"bar", "n_tasks", "n_solved", "solve_rate",
+                      "median_turns_to_solve", "tasks"}
+    # nested tasks are sorted by task_id
+    assert [t["task_id"] for t in d["tasks"]] == ["alpha", "zeta"]
+    z = next(t for t in d["tasks"] if t["task_id"] == "zeta")
+    assert set(z) == {"task_id", "solved", "first_solved_attempt",
+                      "best_score", "n_attempts", "n_runs", "bar"}
+    assert z["best_score"] == 0.9912        # rounded to 4 places
+
+
+def test_holdout_task_ids_missing_manifest_is_empty(tmp_path):
+    assert holdout_task_ids(tmp_path / "no_manifest.yaml") == set()
+
+
+def test_holdout_only_with_empty_holdout_set_scores_nothing(tmp_path):
+    # An empty held-out set must filter EVERYTHING, not silently fall through to
+    # scoring all tasks (that would break the locked-eval contract).
+    _write_ledger(tmp_path / "w0" / "ledger.jsonl",
+                  [_ok_row("sample_bracket", "w0", 1, 0.99)])
+    s = score_run_dir(tmp_path, bar=DEFAULT_BAR, holdout_only=True,
+                      manifest_path=tmp_path / "no_manifest.yaml")
+    assert s.n_tasks == 0
+
+
+def test_custom_bar_threads_and_flips_solved():
+    row = [_ok_row("t", "w", 1, 0.80)]
+    low = score_rows(row, bar=0.75)
+    high = score_rows(row, bar=0.95)
+    assert low["t"].solved is True and low["t"].bar == 0.75
+    assert high["t"].solved is False and high["t"].bar == 0.95
+    assert summarize(low, bar=0.75).bar == 0.75
+
+
+def test_summary_median_odd_count_returns_middle_element():
+    rows = [_ok_row(f"t{i}", "w", a, 0.99) for i, a in enumerate([2, 4, 6])]
+    s = summarize(score_rows(rows, bar=DEFAULT_BAR), bar=DEFAULT_BAR)
+    assert s.median_turns_to_solve == pytest.approx(4.0)   # middle element, odd count
