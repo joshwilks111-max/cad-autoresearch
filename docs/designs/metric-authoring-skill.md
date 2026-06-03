@@ -94,9 +94,13 @@ The defense: assert **invariants** (properties that must hold for ALL inputs of 
   rejected 1-D-marginal fix would have introduced; the benchmark must make it impossible to pass a kernel
   that has it.)
 
-The property-based benchmark built in the round-part-IoU fix (`tasks/iou_benchmark/`) is the seed of this
-asset — the skill consumes the same benchmark, just iterating a generated kernel against it instead of a
-hand-written one.
+The property-based benchmark (`tasks/iou_benchmark/`, **not yet built**) is the first deliverable of this
+skill's build session — the skill iterates a generated kernel against it. Its first property cases come
+straight from the round-part investigation ([issue #7](https://github.com/joshwilks111-max/cad-autoresearch/issues/7)):
+self-IoU = 1.0, same-solid-different-construction equivalence, and the adversarial false-positives (stepped-hub
+vs straight bushing, cone vs cylinder) that the rejected 1-D-marginal fix would have introduced. (Note: the
+round-part IoU degeneracy that motivated all this did **not** reproduce when diagnosed — see issue #7 — so the
+benchmark's value is forward-looking: lock the invariants a future kernel must satisfy, not patch a live bug.)
 
 ## Open questions for the build session
 
@@ -119,5 +123,5 @@ hand-written one.
 - `docs/known-limitations.md` §2 (round-part IoU) + §9 (determinism) — the constraints.
 - `docs/research-and-deferred.md` — roadmap entry pointing here.
 - [issue #7](https://github.com/joshwilks111-max/cad-autoresearch/issues/7) — the bug that motivated the bet.
-- `tasks/iou_benchmark/` — the property-based benchmark seed (built with the round-part fix).
+- `tasks/iou_benchmark/` — the property-based benchmark (NOT yet built; the first deliverable of this skill's build session).
 - The gbrain concept `templates-are-priors-eval-is-the-closed-loop` — the prior-art pattern this applies.

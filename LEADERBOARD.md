@@ -1,7 +1,8 @@
 # Grid Run Leaderboard — live Opus spec grid (2026-06-03)
 
 **Spec track: 13/13 tasks solved ≥ 0.95** in a staged live `claude -p` Opus grid (base commit
-`431c2e6`, post-PR #5 harness fix), on-subscription (OAuth; `ANTHROPIC_API_KEY` scrubbed). Both
+`431c2e6`, the PR #6 merge — itself post the PR #5 `8f14e8a` harness fix), on-subscription (OAuth;
+`ANTHROPIC_API_KEY` scrubbed). Both
 genuinely-open parts solved this run (`hex_bolt` 0.344→0.998, `trial_lbracket` 0.886→0.976), each
 via a `program.md` prompt hint. Two spec-less tasks (`thinwall_box`, `twin_bodies`) got authored
 specs and solved.
@@ -29,7 +30,7 @@ re-run that task and commit its `.best_score` + `best_candidate.py`.
 | thinwall_box | easy | spec | 0.993 | 11 | solved (authored spec) | live-2026-06-03 |
 | trial_lbracket | easy | spec | 0.976 | — | solved (single-L-profile hint) | live-2026-06-03 |
 | sample_bracket | easy | spec | 0.962 | 15 | solved | live-2026-06-03 |
-| nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, NIST washer) | mock-2026-05-30 |
+| nist_ftc_11 | easy | spec | 0.956 | 6 | solved (real, NIST plate ~63×63×3) | mock-2026-05-30 |
 | nist_ftc_09 | hard | spec | 0.758 | 163 | real partial (topology-capped) | mock-2026-05-30 |
 | nist_ctc_05 | hard | drawing | 0.688 | 156 | real partial (topology+angular capped) | mock-2026-05-30 |
 | nist_stc_06 | hard | drawing | 0.628 | 144 | real partial (drawing track) | mock-2026-05-30 |
