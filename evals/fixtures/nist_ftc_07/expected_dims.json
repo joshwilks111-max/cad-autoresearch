@@ -1,0 +1,33 @@
+{
+  "_comment": "HAND-AUTHORED answer key for the nist_ftc_07 drawing-read eval. Derived ONLY from the callouts DRAWN on the NIST PMI FTC-07 drawing (read from 'View B', PDF page 1, the clearest dimensioned isometric), tile-cropped from a 500-DPI render into 4 overlapping quadrants and transcribed by eye. NOT from ground_truth/, the .stp, meta.json or topology.json. Values AS DRAWN in DECIMAL INCHES (units=in, NOTES block states 'UNITS: INCHES'), pre-normalization (downstream normalize_to_mm scales x25.4). Each diameter recorded ONCE on its feature. NOTE: the primary task drawing.png is View A (page 0); this key is authored from View B because every toleranced diameter is legible there. The two views show the same part, so the callout set is shared. Counterbore on the Ø.281 pattern captured as type=counterbore with both bore and c'bore diameters. Auditable: re-render page 1 @500 DPI, tile-crop, callouts reappear at the cited provenance.",
+  "units": "in",
+  "unit_source": "title_block",
+  "scale": "unknown",
+  "views_present": ["ISOMETRIC"],
+  "dimensions": [
+    {"view": "ISOMETRIC", "type": "depth", "nominal_mm": 0.30, "upper_tol_mm": 0.02, "lower_tol_mm": -0.02, "feature_ref": "counterbore_depth", "provenance": "TL quadrant, near 4X Ø.281, counterbore depth callout 'v.30 +/-.02'"}
+  ],
+  "features": [
+    {"id": "cbore_holes", "type": "counterbore", "polarity": "cut", "diameter_mm": 0.281, "depth_mm": null, "quantity": 4, "gdt_refs": ["pos_cbore_06", "pos_cbore_02"], "provenance": "TL quadrant, top, '4X Ø.281 +.006/-.001' through, counterbored Ø.438 +.001/-.010 deep .30"},
+    {"id": "cbore_counterbore_dia", "type": "counterbore", "polarity": "cut", "diameter_mm": 0.438, "depth_mm": 0.30, "quantity": 4, "gdt_refs": [], "provenance": "TL quadrant, the counterbore diameter of the 4X Ø.281 pattern: 'Ø.438 +.001/-.010'"},
+    {"id": "side_holes_594", "type": "through_hole", "polarity": "cut", "diameter_mm": 0.594, "depth_mm": null, "quantity": 2, "gdt_refs": ["pos_594"], "provenance": "TL/BL quadrants, left side, '2X Ø.594 +.012/-.002'"},
+    {"id": "front_holes_173", "type": "through_hole", "polarity": "cut", "diameter_mm": 0.173, "depth_mm": null, "quantity": 4, "gdt_refs": ["pos_173", "pos_173_a"], "provenance": "BL/BR quadrants, front face, '4X Ø.173 +.005/-.001'"},
+    {"id": "right_holes_875", "type": "through_hole", "polarity": "cut", "diameter_mm": 0.875, "depth_mm": null, "quantity": 3, "gdt_refs": ["pos_875"], "provenance": "BR quadrant, right face, '3X Ø.875 +/-.020 (ST)' and '3X Ø.875 +/-.010'"}
+  ],
+  "gdt_frames": [
+    {"id": "pos_cbore_06", "symbol": "position", "tolerance_mm": 0.06, "material_condition": "MMC", "datum_refs": ["E", "B", "C"], "provenance": "TL quadrant, near 4X Ø.281, frame pos Ø.06(M) | E | B | C"},
+    {"id": "pos_cbore_02", "symbol": "position", "tolerance_mm": 0.02, "material_condition": "MMC", "datum_refs": ["E", "B", "C"], "provenance": "TL quadrant, near 4X Ø.281, frame pos Ø.02(M) | E | B | C"},
+    {"id": "profile_coplanar_04", "symbol": "profile", "tolerance_mm": 0.04, "material_condition": null, "datum_refs": ["A", "B", "C"], "provenance": "TL/TR quadrants, '4 COPLANAR SURFACES', frame profile .04 | A | B | C"},
+    {"id": "profile_coplanar_01", "symbol": "profile", "tolerance_mm": 0.01, "material_condition": null, "datum_refs": ["A"], "provenance": "TL/TR quadrants, '4 COPLANAR SURFACES', frame profile .01 | A"},
+    {"id": "pos_594", "symbol": "position", "tolerance_mm": 0.040, "material_condition": "MMC", "datum_refs": ["A", "B", "C"], "provenance": "BL quadrant, near 2X Ø.594, frame pos Ø.040(M) | A | B | C, with Ø.045 MAX"},
+    {"id": "pos_173", "symbol": "position", "tolerance_mm": 0.060, "material_condition": null, "datum_refs": ["A", "B", "C"], "provenance": "BL/BR quadrants, near 4X Ø.173, frame pos Ø.060 | A | B | C"},
+    {"id": "pos_173_a", "symbol": "position", "tolerance_mm": 0.015, "material_condition": null, "datum_refs": ["A"], "provenance": "BL/BR quadrants, near 4X Ø.173, frame pos .015 | A"},
+    {"id": "pos_875", "symbol": "position", "tolerance_mm": 0.050, "material_condition": "RFS", "datum_refs": ["A", "B", "C"], "provenance": "BR quadrant, near 3X Ø.875, frame pos Ø.050(S) | A | B | C"}
+  ],
+  "title_block": {
+    "material": null,
+    "drawing_number": "nist_ftc_07_asme1_rd",
+    "general_tolerance_note": "UNITS: INCHES; statistically-toleranced features marked (ST)",
+    "scale_text": null
+  }
+}

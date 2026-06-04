@@ -1,0 +1,179 @@
+{
+  "_comment": "HAND-AUTHORED answer key for the nist_ftc_09 drawing-read eval. Derived ONLY from the callouts DRAWN on the NIST PMI FTC-09 'View A' drawing (a perforated thin plate), tile-cropped from a 500-DPI render into 4 overlapping quadrants and transcribed by eye. NOT from ground_truth/, the .stp, meta.json or topology.json. Values AS DRAWN in DECIMAL INCHES (units=in; NOTES say 'UNITS: INCHES' with bracketed [mm] equivalents - the primary inch values are recorded, NOT the mm brackets), pre-normalization (downstream normalize_to_mm scales x25.4). Each diameter recorded ONCE on its feature. This part has TWO distinct 3X \u00d8.250 hole patterns (different position-frame datums) and TWO \u00d8.234 callouts; recorded as separate features. Auditable: re-render page 0 @500 DPI, tile-crop, callouts reappear at the cited provenance.",
+  "units": "in",
+  "unit_source": "title_block",
+  "scale": "unknown",
+  "views_present": [
+    "ISOMETRIC"
+  ],
+  "dimensions": [
+    {
+      "view": "ISOMETRIC",
+      "type": "linear",
+      "nominal_mm": 0.1195,
+      "upper_tol_mm": null,
+      "lower_tol_mm": null,
+      "feature_ref": "plate_thickness",
+      "provenance": "NOTES block, 'MATERIAL (.1195 THICK) 11 GA 304 SST SHT' - the sheet thickness"
+    }
+  ],
+  "features": [
+    {
+      "id": "holes_250_pattern_a",
+      "type": "through_hole",
+      "polarity": "cut",
+      "diameter_mm": 0.25,
+      "depth_mm": null,
+      "quantity": 3,
+      "gdt_refs": [
+        "pos_250a_050",
+        "pos_250a_010"
+      ],
+      "provenance": "TR quadrant, '3X \u00d8.250 +.003/-.000' upper pattern, frames pos \u00d8.050(M).260 | A B C and pos \u00d8.010(P).260 | A"
+    },
+    {
+      "id": "holes_250_pattern_b",
+      "type": "through_hole",
+      "polarity": "cut",
+      "diameter_mm": 0.25,
+      "depth_mm": null,
+      "quantity": 3,
+      "gdt_refs": [
+        "pos_250b_050",
+        "pos_250b_010"
+      ],
+      "provenance": "BR quadrant, '3X \u00d8.250 +.003/-.000' lower pattern, frames pos \u00d8.050(M).260 | A B C and pos \u00d8.010(P).260 | A"
+    },
+    {
+      "id": "holes_234_top",
+      "type": "through_hole",
+      "polarity": "cut",
+      "diameter_mm": 0.234,
+      "depth_mm": null,
+      "quantity": 2,
+      "gdt_refs": [
+        "pos_234_016m"
+      ],
+      "provenance": "TR quadrant, top, '2X \u00d8.234 +/-.008', frame pos \u00d8.016(M) | A B C"
+    },
+    {
+      "id": "holes_234_left",
+      "type": "through_hole",
+      "polarity": "cut",
+      "diameter_mm": 0.234,
+      "depth_mm": null,
+      "quantity": 1,
+      "gdt_refs": [
+        "pos_234_016"
+      ],
+      "provenance": "TR/BR quadrants, left and bottom, '\u00d8.234 +/-.008' single callouts, frame pos \u00d8.016 | A | B (datum C)"
+    },
+    {
+      "id": "center_slot",
+      "type": "slot",
+      "polarity": "cut",
+      "diameter_mm": null,
+      "depth_mm": null,
+      "quantity": 1,
+      "gdt_refs": [],
+      "provenance": "center of plate, large rectangular cutout (no nominal callout legible on this view)"
+    }
+  ],
+  "gdt_frames": [
+    {
+      "id": "pos_250a_050",
+      "symbol": "position",
+      "tolerance_mm": 0.05,
+      "material_condition": "MMC",
+      "datum_refs": [
+        "A",
+        "B",
+        "C"
+      ],
+      "provenance": "TR quadrant, upper 3X \u00d8.250, frame pos \u00d8.050(M) .260 | A | B | C"
+    },
+    {
+      "id": "pos_250a_010",
+      "symbol": "position",
+      "tolerance_mm": 0.01,
+      "material_condition": null,
+      "datum_refs": [
+        "A"
+      ],
+      "provenance": "TR quadrant, upper 3X \u00d8.250, frame pos \u00d8.010(P) .260 | A P = projected tolerance zone (NOT a material condition)"
+    },
+    {
+      "id": "pos_250b_050",
+      "symbol": "position",
+      "tolerance_mm": 0.05,
+      "material_condition": "MMC",
+      "datum_refs": [
+        "A",
+        "B",
+        "C"
+      ],
+      "provenance": "BR quadrant, lower 3X \u00d8.250, frame pos \u00d8.050(M) .260 | A | B | C"
+    },
+    {
+      "id": "pos_250b_010",
+      "symbol": "position",
+      "tolerance_mm": 0.01,
+      "material_condition": null,
+      "datum_refs": [
+        "A"
+      ],
+      "provenance": "BR quadrant, lower 3X \u00d8.250, frame pos \u00d8.010(P) .260 | A"
+    },
+    {
+      "id": "pos_234_016m",
+      "symbol": "position",
+      "tolerance_mm": 0.016,
+      "material_condition": "MMC",
+      "datum_refs": [
+        "A",
+        "B",
+        "C"
+      ],
+      "provenance": "TR quadrant, 2X \u00d8.234, frame pos \u00d8.016(M) | A | B | C"
+    },
+    {
+      "id": "pos_234_016",
+      "symbol": "position",
+      "tolerance_mm": 0.016,
+      "material_condition": null,
+      "datum_refs": [
+        "A",
+        "B"
+      ],
+      "provenance": "TR/BR quadrants, \u00d8.234 single, frame pos \u00d8.016 | A | B (datum C)"
+    },
+    {
+      "id": "profile_01_a",
+      "symbol": "profile",
+      "tolerance_mm": 0.01,
+      "material_condition": null,
+      "datum_refs": [
+        "A"
+      ],
+      "provenance": "BL/BR quadrants, lower-left, profile .01 | A"
+    },
+    {
+      "id": "profile_05_abc",
+      "symbol": "profile",
+      "tolerance_mm": 0.05,
+      "material_condition": null,
+      "datum_refs": [
+        "A",
+        "B",
+        "C"
+      ],
+      "provenance": "BR quadrant, bottom-right, profile .05 | A | B | C"
+    }
+  ],
+  "title_block": {
+    "material": "11 GA 304 SST SHT, ASTM A240",
+    "drawing_number": "nist_ftc_09_asme1_rd",
+    "general_tolerance_note": "UNITS: INCHES; bracketed [XXX] values are millimetres; plate .1195 thick",
+    "scale_text": null
+  }
+}
