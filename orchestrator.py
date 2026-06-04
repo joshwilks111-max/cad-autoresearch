@@ -38,6 +38,7 @@ from pathlib import Path
 
 import yaml
 
+from loop.answer_key_guard import restore_orphaned
 from loop.billing import print_billing_banner, scrub_billing_env
 
 REPO = Path(__file__).resolve().parent
@@ -192,6 +193,11 @@ def main():
     # credential to `claude -p`. The per-spawn scrub in policies.py is the backstop.
     scrub_billing_env()
     print_billing_banner()   # once per launch — which plane (subscription) is active
+    # Self-heal the answer-key guard: if a previous run was hard-killed mid-turn, its
+    # hidden dimension/score keys may be stranded out-of-repo. Put any back before launch.
+    _orphans = restore_orphaned(REPO)
+    if _orphans:
+        print(f"[guard] restored {len(_orphans)} answer-key(s) stranded by a prior kill")
     if args.backend == "tmux":
         launch_tmux(args.session, jobs, args.dry_run)
     else:
