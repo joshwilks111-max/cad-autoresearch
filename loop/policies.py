@@ -24,6 +24,7 @@ import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .answer_key_guard import AnswerKeyGuardBusy, hidden_answer_keys
 from .billing import subscription_env
 
 
@@ -134,13 +135,27 @@ class ClaudeCodeProposer:
                "--permission-mode", "acceptEdits",
                "--allowedTools", self.allowed_tools]
         try:
-            # env scrub: drop ANTHROPIC_API_KEY so `claude -p` bills the subscription
-            # (OAuth) and never the metered API. See loop/billing.py.
-            proc = subprocess.run(cmd, cwd=str(self.repo_dir), capture_output=True,
-                                  text=True, timeout=self.turn_timeout,
-                                  env=subscription_env())
+            # Two protections wrap this single spawn:
+            #  1. env scrub: drop ANTHROPIC_API_KEY so `claude -p` bills the
+            #     subscription (OAuth) and never the metered API (loop/billing.py).
+            #  2. answer-key guard: the worker's cwd IS the repo root, so the
+            #     dimension/score answer-keys (evals/fixtures/*/expected_dims.json,
+            #     tasks/*/.best_score, tasks/*/best_candidate.py) would be a
+            #     Read/Grep-able answer key. `--allowedTools` can't path-scope Read,
+            #     so we move them out of the worker-resolvable tree for the duration
+            #     of the turn and restore them after (loop/answer_key_guard.py).
+            with hidden_answer_keys(self.repo_dir):
+                proc = subprocess.run(cmd, cwd=str(self.repo_dir), capture_output=True,
+                                      text=True, timeout=self.turn_timeout,
+                                      env=subscription_env())
         except subprocess.TimeoutExpired:
             return Candidate(code="", meta={"error": "cli_timeout"})
+        except AnswerKeyGuardBusy:
+            # Fail closed: another live worker owns this checkout's answer-key guard,
+            # so hiding the keys would race/leak. Skip this turn rather than run a
+            # worker that could read the answer key. Serialize workers or give each
+            # its own checkout/worktree to run them concurrently.
+            return Candidate(code="", meta={"error": "answer_key_guard_busy"})
 
         if not target.exists():
             return Candidate(code="", meta={"error": "no_candidate_written",

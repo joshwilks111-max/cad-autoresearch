@@ -28,6 +28,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent
 import orchestrator as orch   # reuse worker_cmd / aggregate  # noqa: E402
+from loop.answer_key_guard import restore_orphaned  # noqa: E402
 from loop.billing import print_billing_banner, scrub_billing_env, subscription_env  # keep on the subscription  # noqa: E402
 
 
@@ -106,6 +107,10 @@ def main():
     # the meta-agent — strip billing-steering vars here too. Per-spawn scrubs are backstops.
     scrub_billing_env()
     print_billing_banner()   # which plane (subscription) the meta-agent will use
+    # Self-heal the answer-key guard after a hard-killed prior run (see orchestrator).
+    _orphans = restore_orphaned(REPO)
+    if _orphans:
+        print(f"[guard] restored {len(_orphans)} answer-key(s) stranded by a prior kill")
 
     while True:
         elapsed_min = (time.time() - t_start) / 60.0

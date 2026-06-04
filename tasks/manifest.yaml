@@ -117,6 +117,7 @@ tasks:
     tier: hard
     description: NIST PMI FTC-07 — AP242-e2 annotated part, 306 faces, 3 shells, bbox ~352 x 136 x 263 mm.
     spec: spec.md
+    drawing: drawing.png          # nist_ftc_07_asme1_rd.pdf p0 ("View A") rasterised @300 DPI — drawing-read input
     default_track: drawing
     holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
@@ -129,6 +130,7 @@ tasks:
     tier: hard
     description: NIST PMI FTC-09 — AP242-e1 annotated part, 163 faces, 6 shells, bbox ~227 x 5.3 x 279 mm (sheet-like).
     spec: spec.md
+    drawing: drawing.png          # nist_ftc_09_asme1_rd.pdf p0 ("View A") rasterised @300 DPI — drawing-read input
     default_track: drawing
     holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
@@ -142,6 +144,7 @@ tasks:
     tier: medium
     description: NIST PMI CTC-03 — AP242-e2 annotated part, 120 faces, bbox ~320 x 534 x 163 mm.
     spec: spec.md
+    drawing: drawing.png          # nist_ctc_03_asme1_rc.pdf p0 (single sheet) rasterised @300 DPI — drawing-read input
     default_track: drawing
     holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
@@ -154,6 +157,7 @@ tasks:
     tier: hard
     description: NIST PMI CTC-05 — AP242-e1 annotated part, 156 faces, bbox ~527 x 559 x 483 mm (large).
     spec: spec.md
+    drawing: drawing.png          # nist_ctc_05_asme1_rd.pdf p0 ("View 1 of 2") rasterised @300 DPI — drawing-read input
     default_track: drawing
     holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >

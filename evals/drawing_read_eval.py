@@ -49,7 +49,15 @@ def _nominals(extraction: dict, *, key: str = "nominal_mm") -> list[float]:
     """
     out: list[float] = []
     for d in extraction.get("dimensions", []) or []:
-        v = d.get(key) if isinstance(d, dict) else None
+        if not isinstance(d, dict):
+            continue
+        # Angular dims are degrees, not lengths — they must never enter the mm length
+        # pool. (A fixture/read storing an angle in `nominal_mm` would otherwise be
+        # scaled x25.4 by normalize_to_mm — 90deg -> 2286 — and inflate the recall
+        # denominator with a phantom "length". Skip by the sibling `type`.)
+        if str(d.get("type", "")).lower() in ("angle", "angular"):
+            continue
+        v = d.get(key)
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             out.append(float(v))
     for f in extraction.get("features", []) or []:

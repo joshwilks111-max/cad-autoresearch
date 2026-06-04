@@ -180,9 +180,19 @@ def _is_numeric_dim_field(key: str) -> bool:
 
 
 def _convert_dict(d: dict[str, Any], factor: float) -> None:
-    """Recursively multiply all recognised numeric dimension fields by *factor*."""
+    """Recursively multiply all recognised numeric dimension fields by *factor*.
+
+    An ANGULAR dimension (``type`` in {'angle','angular'}) carries its value in
+    degrees even when stored under a length-named field like ``nominal_mm``. Scaling
+    it by 25.4 produces a phantom length (90deg -> 2286) that pollutes downstream
+    length pools. So when this dict is an angular dim, skip its nominal/length fields
+    (still scale a genuine length-tolerance sibling if present, but NOT the nominal)."""
+    is_angular = str(d.get("type", "")).lower() in ("angle", "angular")
     for key, val in d.items():
         if isinstance(val, (int, float)) and _is_numeric_dim_field(key):
+            # never scale an angular dim's nominal — it's degrees, not inches.
+            if is_angular and "nominal" in key.lower():
+                continue
             d[key] = val * factor
         elif isinstance(val, dict):
             _convert_dict(val, factor)
