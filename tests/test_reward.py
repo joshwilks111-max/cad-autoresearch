@@ -218,3 +218,79 @@ def test_runner_relative_workspace_does_not_double_path():
         os.chdir(prev)
     assert r.ok, f"relative workspace must build, not double the path; error={r.error!r}"
     assert r.error is None
+
+
+# --- round-part cylindrical-IoU regression (the 2026-06-04 washer-inversion fix) ---
+
+def _round_mesh(kind: str, od: float, bore: float, w: float):
+    """Build an annulus/stepped-shaft IN-TEST and return its trimesh (GT-free — these
+    are self-built primitives, never read from any ground_truth/). `kind`:
+    'circle' / 'ellipse' produce the SAME annulus via two tessellations (Circle vs
+    equal-radii Ellipse); 'stepped'/'plain' build axially-structured controls."""
+    import tempfile, os
+    from build123d import (BuildPart, BuildSketch, Circle, Ellipse, extrude, Plane,
+                           Mode, Cylinder, Align, Axis, export_stl)
+    if kind in ("circle", "ellipse"):
+        e = kind == "ellipse"
+        with BuildPart() as bp:
+            with BuildSketch(Plane.XY):
+                (Ellipse(od / 2, od / 2) if e else Circle(od / 2))
+                (Ellipse(bore / 2, bore / 2, mode=Mode.SUBTRACT) if e
+                 else Circle(bore / 2, mode=Mode.SUBTRACT))
+            extrude(amount=w)
+        part = bp.part
+    elif kind == "stepped":          # Ø(od)×(w) then Ø(bore)×(w) stacked along Z
+        with BuildPart() as bp:
+            Cylinder(od / 2, w, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            with BuildPart(bp.part.faces().sort_by(Axis.Z)[-1]):
+                Cylinder(bore / 2, w, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        part = bp.part
+    else:                            # 'plain' Ø(od)×(w)
+        with BuildPart() as bp:
+            Cylinder(od / 2, w)
+        part = bp.part
+    fd, p = tempfile.mkstemp(suffix=".stl"); os.close(fd)
+    export_stl(part, p, tolerance=0.05)
+    m = trimesh.load(p, force="mesh"); os.unlink(p)
+    return m
+
+
+def test_round_part_iou_no_washer_inversion():
+    """Regression for the 2026-06-04 cylindrical-IoU bug: a CORRECT round part scored
+    LOWER than a WRONG-bore one (the grader preferred wrong geometry), because the joint
+    (r, axial) grid was too axially sensitive for thin parts — a washer's ~3mm extent
+    over 64 axial bins scattered the same radial ring across bins for two tessellations,
+    and the axial-sign search landed a half-overlap. The fix: radial sharp (64 bins) +
+    axial coarse (32 bins) + ±1 axial dilation, in harness/geometry._cylindrical_iou.
+
+    There was NO round-part IoU test before this (the suite only used the prismatic
+    sample_bracket), which is why the bug shipped and survived multiple sessions. All
+    parts are built in-test, GT-free. Asserts, through the real G.iou entry point:
+      - bearing_608 cross-tessellation (Circle vs Ellipse, byte-DIFFERENT meshes) ≥0.95;
+      - a CORRECT washer scores clearly ABOVE a WRONG-bore one (the inversion);
+      - round-part self-identity is exactly 1.0 (the fix didn't break self-overlap);
+      - radial sharpness is preserved: a stepped shaft still beats a plain cylinder of
+        the same envelope (radial-only would false-positive here — the lossy trap)."""
+    from harness import geometry as G
+    # bearing_608 (OD22/bore8/w7) built two ways — same solid, different tessellation
+    bear_a = _round_mesh("circle", 22, 8, 7)
+    bear_b = _round_mesh("ellipse", 22, 8, 7)
+    assert G.iou(bear_a, bear_a) >= 0.999, "round self-identity must be 1.0"
+    assert G.iou(bear_a, bear_b) >= 0.95, "byte-equal round solids must score high"
+
+    # thin washer (OD63/t3): correct cross-tessellation vs wrong bore (Ø42 not Ø32)
+    wash_a = _round_mesh("circle", 63, 32, 3)
+    wash_b = _round_mesh("ellipse", 63, 32, 3)
+    wash_wrong = _round_mesh("circle", 63, 42, 3)
+    assert G.iou(wash_a, wash_a) >= 0.999
+    right = G.iou(wash_a, wash_b)
+    wrong = G.iou(wash_a, wash_wrong)
+    assert right > wrong + 0.05, (
+        f"correct washer ({right:.3f}) must beat wrong-bore ({wrong:.3f}) — the inversion")
+
+    # radial sharpness preserved: stepped shaft must NOT look like a plain cylinder
+    step = _round_mesh("stepped", 20, 12, 10)        # Ø20×10 + Ø12×10
+    plain = _round_mesh("plain", 20, 0, 20)          # Ø20×20, same envelope
+    assert G.iou(step, step) >= 0.999
+    assert G.iou(step, step) > G.iou(step, plain) + 0.05, (
+        "stepped vs plain must differ — radial-only would false-positive here")

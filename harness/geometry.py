@@ -254,15 +254,36 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
         r = np.linalg.norm(p - np.outer(z, n), axis=1)
         return r, z
 
+    # 3. AXIAL de-jitter (the 2026-06-04 fix). The joint (r, axial) grid was too
+    #    axially sensitive for THIN symmetric parts: a washer's ~3mm extent binned over
+    #    64 axial bins scatters the SAME radial ring across different axial bins for two
+    #    independently-tessellated meshes (and the axial-sign search lands a half-overlap),
+    #    so a CORRECT washer scored ~0.49 while a WRONG-bore one scored ~0.71 — the grader
+    #    preferred the wrong part. Radial-only would fix the washer but FALSE-POSITIVE on
+    #    stepped shafts (radial structure that varies with axial position). The fix keeps
+    #    the joint grid but (a) bins AXIAL coarser (axial_bins=32, absorbs tessellation
+    #    z-jitter) while keeping RADIAL sharp (rbins=64, so wrong-bore + stepped variation
+    #    stay penalised), and (b) dilates the AXIAL axis by +/-1 bin (de-jitters the
+    #    sign-search half-overlap). Verified GT-free: bearing_608 cross-tess 0.78->0.98,
+    #    washer correct>wrong (0.85>0.71), round/stepped self-identity 1.0, stepped right
+    #    clearly > wrong/plain. Radial sharpness is what preserves stepped discrimination.
+    rbins = nbins          # radial: sharp (default 64) — wrong-bore / stepped detail
+    axial_bins = 32        # axial: coarser — absorbs thin-part tessellation z-jitter
+
     ra, za = project(pa)
     rb, zb = project(pb)
     rmax = max(ra.max(), rb.max()) or 1.0         # SHARED radial frame
 
     def grid(r, z, zlo, zspan):
-        ri = np.clip((r / rmax * (nbins - 1)).astype(int), 0, nbins - 1)
-        zi = np.clip(((z - zlo) / zspan * (nbins - 1)).astype(int), 0, nbins - 1)
-        g = np.zeros((nbins, nbins), dtype=bool)
+        ri = np.clip((r / rmax * (rbins - 1)).astype(int), 0, rbins - 1)
+        zi = np.clip(((z - zlo) / zspan * (axial_bins - 1)).astype(int), 0, axial_bins - 1)
+        g = np.zeros((rbins, axial_bins), dtype=bool)
         g[ri, zi] = True
+        # +/-1 AXIAL dilation only (radial stays sharp): a True cell also marks the
+        # adjacent axial bins, so a one-bin axial offset between two correct meshes
+        # still overlaps. np.roll wraps, but the clipped extremes are empty rows here.
+        g |= np.roll(g, 1, axis=1)
+        g |= np.roll(g, -1, axis=1)
         return g
 
     best = 0.0
