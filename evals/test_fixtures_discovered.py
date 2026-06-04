@@ -124,3 +124,24 @@ def test_fixture_units_are_valid(key_path: Path):
     assert data["units"] in ("mm", "in", "unknown"), (
         f"{key_path.parent.name}: units={data['units']!r} not in mm|in|unknown"
     )
+
+
+@pytest.mark.parametrize("key_path", _FIXTURE_KEYS, ids=_FIXTURE_IDS)
+def test_no_angle_pollutes_the_length_recall_pool(key_path: Path):
+    """The /review MEDIUM: an angular dim (type='angle') must NOT enter the mm length
+    recall pool. If it did, normalize_to_mm would scale e.g. 90deg x25.4 -> 2286 and
+    inflate the recall denominator with a phantom 'length', so a perfect read could
+    miss the bar on the answer-key's own units artifact. _nominals must drop angles."""
+    from drawing_extract import normalize_extraction  # noqa: E402
+    data = _load(key_path)
+    has_angle = any(
+        isinstance(d, dict) and str(d.get("type", "")).lower() in ("angle", "angular")
+        for d in data.get("dimensions", [])
+    )
+    pool = _nominals(normalize_extraction(data))
+    # no value in the length pool may be an implausibly-scaled angle (>= 360 mm only
+    # appears here if a degree value was scaled; real callouts on these parts are < 360mm)
+    assert all(v < 360.0 for v in pool), (
+        f"{key_path.parent.name}: length pool has a scaled-angle artifact: "
+        f"{[v for v in pool if v >= 360.0]} (has_angle_dim={has_angle})"
+    )

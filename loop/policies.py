@@ -24,7 +24,7 @@ import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .answer_key_guard import hidden_answer_keys
+from .answer_key_guard import AnswerKeyGuardBusy, hidden_answer_keys
 from .billing import subscription_env
 
 
@@ -150,6 +150,12 @@ class ClaudeCodeProposer:
                                       env=subscription_env())
         except subprocess.TimeoutExpired:
             return Candidate(code="", meta={"error": "cli_timeout"})
+        except AnswerKeyGuardBusy:
+            # Fail closed: another live worker owns this checkout's answer-key guard,
+            # so hiding the keys would race/leak. Skip this turn rather than run a
+            # worker that could read the answer key. Serialize workers or give each
+            # its own checkout/worktree to run them concurrently.
+            return Candidate(code="", meta={"error": "answer_key_guard_busy"})
 
         if not target.exists():
             return Candidate(code="", meta={"error": "no_candidate_written",
