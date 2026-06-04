@@ -97,6 +97,25 @@ Each turn you get something like:
 - A **build failure** report includes the stderr tail — fix the actual error
   before trying anything ambitious.
 
+**The hints name your failure types — match each phrase, apply its fix.** "What to
+fix next" is generated from your scores; it may list one hint or several. Work the
+lowest-layer one first (a build failure before a missing feature, a missing feature
+before a fillet radius) — don't try to fix everything in a single turn:
+
+| If the hint says… | It means | Do this |
+| --- | --- | --- |
+| **No valid solid was produced** | build raised / `result` unset | read the stderr; get *anything* watertight before anything ambitious |
+| **SOLID COLLAPSED: candidate volume is only X%** | a boolean failed (degenerate, not erroring) — NOT a missing feature | build independent sub-bodies and fuse once at the end; batch SUBTRACT cuts; revolve cones/spheres instead of primitive booleans |
+| **Volume is X% OVER** | feature polarity — a cut modelled as a boss, or a hole not cut | flip the polarity (SUBTRACT vs ADD) on the offending feature |
+| **Volume is X% UNDER** | a missing feature, an over-aggressive cut, or wrong wall thickness | add the missing material / check cut depths + thickness |
+| **Bounding box mismatch** | overall dims or units wrong | re-check the envelope; suspect inch→mm conversion |
+| **Topology differs (candidate vs GT)** | a missing fillet/chamfer/hole, or a feature merged that should be separate | add the small features; keep features separate where the GT does |
+| **Low volumetric IoU** | gross shape is off | STOP tweaking details — re-read the primary profile/sketch first |
+
+Same discipline as the score order: get a building solid → right envelope →
+volume/gross shape → every feature → radii. One hypothesis per turn; don't regress
+a layer you already earned.
+
 ## Spawning subagents (you may, and on the drawing track you should)
 
 You have the `Task` tool. Decompose when it helps:

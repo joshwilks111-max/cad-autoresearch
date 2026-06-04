@@ -66,6 +66,7 @@ tasks:
     description: Ø60x8 flange + Ø36x18 hub + Ø16 axial bore + chamfer (clean round part).
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # iou() takes the cylindrical path; exclude from before/after gates (issue #7)
     notes: Fully rotationally-symmetric — validates the cylindrical round-part IoU end-to-end to >=0.95 (round analog of motor_mount).
 
   - id: motor_mount
@@ -80,6 +81,7 @@ tasks:
     description: Real 608 bearing envelope — annular ring OD22 / bore8 / width7 mm (4 faces, euler 2).
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # annulus on the cylindrical-IoU path; exclude from before/after gates (issue #7)
     notes: >
       Real externally-authored part (public GitHub STEP, not synthetic). A simple annulus =
       Cylinder(r11,h7) - Cylinder(r4,h7). Low-face (4 faces, euler 2) on the cylindrical-IoU
@@ -103,6 +105,7 @@ tasks:
     spec: spec.md                 # stub only; this is a drawing-track part (no hand-authored spec)
     drawing: drawing.png          # STC_06.pdf rasterised — the real input for this task
     default_track: drawing
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_stc_06_asme1_ap242-e3.stp via make_ground_truth.py.
@@ -115,6 +118,7 @@ tasks:
     description: NIST PMI FTC-07 — AP242-e2 annotated part, 306 faces, 3 shells, bbox ~352 x 136 x 263 mm.
     spec: spec.md
     default_track: drawing
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ftc_07_asme1_ap242-e2.stp via make_ground_truth.py.
@@ -126,6 +130,7 @@ tasks:
     description: NIST PMI FTC-09 — AP242-e1 annotated part, 163 faces, 6 shells, bbox ~227 x 5.3 x 279 mm (sheet-like).
     spec: spec.md
     default_track: drawing
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ftc_09_asme1_ap242-e1.stp via make_ground_truth.py.
@@ -138,6 +143,7 @@ tasks:
     description: NIST PMI CTC-03 — AP242-e2 annotated part, 120 faces, bbox ~320 x 534 x 163 mm.
     spec: spec.md
     default_track: drawing
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ctc_03_asme1_ap242-e2.stp via make_ground_truth.py.
@@ -149,6 +155,7 @@ tasks:
     description: NIST PMI CTC-05 — AP242-e1 annotated part, 156 faces, bbox ~527 x 559 x 483 mm (large).
     spec: spec.md
     default_track: drawing
+    holdout: true                 # locked eval set: real, high-face-count NIST parts (floored below cap); never tune on these
     notes: >
       Real NIST MBE PMI test case (US Government work, unrestricted — committable).
       Ground truth ingested from nist_ctc_05_asme1_ap242-e1.stp via make_ground_truth.py.
@@ -161,6 +168,7 @@ tasks:
     description: Ø80x20 V-belt pulley + 40deg vee groove (12mm deep, root Ø56) + Ø40 hub (w32) + Ø20 bore + bore chamfers.
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # iou() takes the cylindrical path; exclude from before/after gates (issue #7)
     notes: Fully rotationally-symmetric round part — validates the cylindrical round-part IoU on a NEW grooved (vee-notch) profile distinct from stepped_hub. Reachable to >=0.95.
 
   - id: flanged_bushing
@@ -168,6 +176,7 @@ tasks:
     description: Ø30x40 flanged sleeve bushing + Ø56x6 base flange + Ø18 through bore + Ø24x8 top counterbore + rim/bore chamfers.
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # iou() takes the cylindrical path; exclude from before/after gates (issue #7)
     notes: Fully rotationally-symmetric round part with a counterbore — stress-tests the cylindrical IoU on a STEPPED INNER DIAMETER (Ø18 bore stepping to Ø24 at Z=32), distinct from stepped_hub (outer step) and pulley_vgroove (vee groove). Reachable to >=0.95.
 
   - id: slotted_ring
@@ -175,6 +184,7 @@ tasks:
     description: Castle-nut collar Ø50 outer / Ø28 bore / h18 + 6 axial top-face slots (5w x 8deep, 60deg polar) + 1mm rim chamfer.
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # _is_rotationally_symmetric TRUE despite slots; cylindrical IoU path (issue #7)
     notes: Rotational-symmetry-gate probe. _is_rotationally_symmetric returns TRUE despite the 6 slots (too small a volume fraction to perturb the covariance eigenvalues past tol), so iou() takes the cylindrical path. Tests whether the cylindrical (angle-collapsed) IoU can still discriminate slot count/width; baseline bounding-cyl composite=0.415.
 
   - id: hex_bolt
@@ -182,6 +192,7 @@ tasks:
     description: Hex-head shoulder bolt — hex head (across-flats 24mm, h10) + Ø16 round shank (L40) + 1mm shank-tip chamfer + 0.8mm/30deg head-edge chamfer. Single solid, bbox 27.7 x 24 x 50 mm, vol ~12988 mm^3.
     spec: spec.md
     default_track: spec
+    rotational_symmetry: true   # hex head reads as symmetric to the eigenvalue gate -> cylindrical IoU path (issue #7)
     notes: >
       MIXED prismatic hex-head + round-shank part (coaxial about Z). Intended as the voxel-IoU contrast to the pure-round parts, BUT _is_rotationally_symmetric returns TRUE on the hex head: a regular hexagon has 6-fold in-plane symmetry so its two in-plane covariance eigenvalues are near-equal (33.93 vs 33.81, ratio 0.0035 << tol 0.05) and the gate sees a shaft, so iou() actually takes the CYLINDRICAL (angle-collapsed) path, not the voxel path.
       Useful datapoint: a hex prism is prismatic to a human but rotationally-symmetric to the eigenvalue gate. Baseline full-part bounding-box composite=0.344.
