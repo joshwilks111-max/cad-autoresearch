@@ -161,6 +161,14 @@ Output ONLY the JSON object, no prose, no markdown fences."""
 # --------------------------------------------------------------------------- #
 _REPO = Path(__file__).resolve().parent
 
+# The inch->mm conversion factor (exact, by definition). NIST drawings are in inches;
+# the *_mm fields hold as-drawn values until this scales them.
+MM_PER_INCH = 25.4
+
+# Rasterization DPI for PDF->PNG. 300 is the standard for reading engineering drawings —
+# enough to resolve dimension callouts and GD&T frames without bloating the image.
+DEFAULT_RASTERIZE_DPI = 300
+
 
 def _inline_normalize_to_mm(extracted: dict) -> dict:
     """Liberal, idempotent inch->mm normalizer. Used only when unit_normalize.py
@@ -177,7 +185,7 @@ def _inline_normalize_to_mm(extracted: dict) -> dict:
         extracted.setdefault("conversion_applied", False)
         return extracted
 
-    factor = 25.4
+    factor = MM_PER_INCH
 
     def _scale_numeric_fields(obj: dict) -> None:
         for k, v in list(obj.items()):
@@ -237,7 +245,7 @@ def normalize_extraction(extracted: dict) -> dict:
 # --------------------------------------------------------------------------- #
 # 4. RASTERIZATION  (PDF -> PNG @ 300 DPI via pymupdf)
 # --------------------------------------------------------------------------- #
-def _to_png_bytes(drawing_path: str | Path, dpi: int = 300) -> tuple[bytes, str]:
+def _to_png_bytes(drawing_path: str | Path, dpi: int = DEFAULT_RASTERIZE_DPI) -> tuple[bytes, str]:
     """Return (png_bytes, mime). Rasterizes a PDF at `dpi`; passes images through."""
     p = Path(drawing_path)
     suffix = p.suffix.lower()
@@ -287,13 +295,18 @@ def _read_gemini_key() -> str | None:
     return None
 
 
-# Gemini vision models to try, strongest-first. 2.5 Flash is the measured leader
-# for drawing reading (~77%); 1.5 Flash/Pro are fallbacks for older keys.
+# Gemini vision models to try, strongest-first. NOTE: the drawing-read A/B no longer uses
+# this backend by default — the project reader is Opus on the Claude subscription, not a
+# metered Google plane (see evals/drawing_read_ab.py and docs/experiments/). This backend is
+# retained ONLY for an operator who explicitly has a funded Gemini key and passes
+# backend="gemini". The list below is the strongest-first set verified against the live
+# generativelanguage v1beta/models list on 2026-06-04 for the ~/.banana key; the *-image
+# variants are image-GENERATION (Nano Banana) and are deliberately excluded — we'd want
+# vision-READ models here. Bump these if you re-enable the Gemini read arm.
 _GEMINI_MODELS = (
+    "gemini-3.5-flash",
+    "gemini-flash-latest",     # rolling alias — survives a model rename
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
 )
 
 
@@ -494,9 +507,16 @@ def _backend_gemini(png_bytes: bytes, mime: str) -> dict | None:
     return res
 
 
-def _backend_claude(png_path: str | Path) -> dict | None:
-    """Fallback reader: the local `claude` CLI (subscription) at the ~40% ceiling.
-    Only used if the binary is reachable. Best-effort; returns None if unreachable."""
+def _backend_claude(png_path: str | Path, model: str = "claude-opus-4-8") -> dict | None:
+    """The PRIMARY drawing reader: the local `claude` CLI (subscription via OAuth).
+    Only used if the binary is reachable. Best-effort; returns None if unreachable.
+
+    `model` is passed to `claude -p --model` so the measured arm is the model we MEANT
+    to test. Without it the CLI picks its configured default (maybe Sonnet), silently
+    mislabeling the result as the "Opus arm" (review finding #3). It defaults to the EXPLICIT
+    `claude-opus-4-8` id (not the moving `opus` alias) so the results table records the precise
+    model that ran. The resolved model is recorded in `_backend_detail`.
+    """
     import shutil
     import subprocess
 
@@ -523,28 +543,33 @@ def _backend_claude(png_path: str | Path) -> dict | None:
     )
     try:
         proc = subprocess.run(
-            [exe, "-p", prompt, "--output-format", "text"],
+            [exe, "-p", prompt, "--model", model, "--output-format", "text"],
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=180,
+            # A genuine Opus drawing read (load the PNG via its Read tool, reason through the
+            # 6-step CoT, emit JSON) routinely exceeds 3 min. 180s silently timed out -> None
+            # -> the arm reported "unreachable" when Opus was simply still thinking. 420s gives
+            # real headroom; a true hang still bounds out.
+            timeout=420,
             env=_child_env,
         )
     except Exception:  # noqa: BLE001
         return None
     if proc.returncode != 0 or not (proc.stdout or "").strip():
         return None
+    detail = f"claude CLI (text), model={model}"
     try:
         parsed = json.loads(_strip_json(proc.stdout))
     except Exception:  # noqa: BLE001
         res = empty_result()
         res["_backend"] = "claude"
-        res["_backend_detail"] = "claude CLI returned non-JSON"
+        res["_backend_detail"] = f"{detail}: returned non-JSON"
         res["_warnings"].append("claude CLI reply was not JSON; emitting empty schema")
         return res
     res = _coerce_to_schema(parsed)
     res["_backend"] = "claude"
-    res["_backend_detail"] = "claude CLI (text)"
+    res["_backend_detail"] = detail
     return res
 
 
@@ -587,7 +612,7 @@ def extract_drawing(png_path: str | Path, backend: str = "auto") -> dict:
     else:
         # rasterize once (cheap) so every image backend shares the bytes
         try:
-            png_bytes, mime = _to_png_bytes(p, dpi=300)
+            png_bytes, mime = _to_png_bytes(p, dpi=DEFAULT_RASTERIZE_DPI)
         except Exception as e:  # noqa: BLE001
             return normalize_extraction(
                 _backend_scaffold(f"rasterization failed: {type(e).__name__}: {e}")
