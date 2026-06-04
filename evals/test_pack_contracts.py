@@ -54,6 +54,7 @@ def _build123d_available() -> bool:
 # --------------------------------------------------------------------------- #
 # cad-grade — the referee scores a known-good STEP correctly
 # --------------------------------------------------------------------------- #
+@pytest.mark.slow
 @pytest.mark.skipif(not _BEARING_STEP.exists(), reason="bearing_608 GT STEP not present")
 @pytest.mark.skipif(not _GRADE_STEP.exists(), reason="grade_step.py not present")
 def test_cad_grade_scores_known_step_near_perfect():

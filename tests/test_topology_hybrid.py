@@ -75,6 +75,7 @@ def _plate_with_n_holes(n: int):
 
 # ── 1. the headline lock — fails on main (TypeError), the lbracket rescue ──────
 
+@pytest.mark.slow
 def test_hybrid_rescues_seam_merge_penalized_perfect_part():
     """A geometrically PERFECT part penalised only by a STEP-roundtrip edge-count
     drift (the 51->49 seam merge) must be RESCUED by the hybrid. This recreates the
@@ -145,6 +146,7 @@ def test_count_ratio_beats_cosine_on_monotonicity():
 
 # ── 3. back-compat — hist=None grades EXACTLY as the pre-hybrid path ───────────
 
+@pytest.mark.slow
 def test_back_compat_no_hist_is_exact_only():
     """With no histogram args, the hybrid layer collapses to exact-count matching —
     byte-identical to pre-hybrid behaviour. Guards every existing caller."""
@@ -173,6 +175,7 @@ def test_zero_histogram_scores_zero_not_crash():
 
 # ── 5. solved parts are a NO-OP under the hybrid (zero-regression) ─────────────
 
+@pytest.mark.slow
 def test_solved_part_unmoved_when_exact_and_hist_agree():
     """Where exact-count and histogram already agree (a solved part: both ~1.0),
     the hybrid is a no-op — topology stays 1.0, composite unmoved. This is the
@@ -192,6 +195,7 @@ def test_solved_part_unmoved_when_exact_and_hist_agree():
 
 # ── 6. AFW interaction — the hybrid behaves under adaptive weighting on AND off ─
 
+@pytest.mark.slow
 def test_hybrid_works_with_afw_on_and_off():
     """adaptive_feature_weighting amplifies the topology layer's WEIGHT on high-face
     GTs (reward.py). The hybrid changes the topology layer's VALUE. The two must
@@ -277,6 +281,7 @@ def test_inline_fallback_matches_module():
 
 # ── 9. determinism — the histogram is byte-identical across two runs (D7) ──────
 
+@pytest.mark.slow
 def test_histogram_is_deterministic_across_runs():
     """The histogram feeds a deterministic reward layer. Two runs of the SAME
     candidate must produce a byte-identical histogram (no dict-ordering or
@@ -297,6 +302,7 @@ def test_histogram_is_deterministic_across_runs():
 
 # ── 10. score() degrades gracefully when the hist tool can't import (review) ───
 
+@pytest.mark.slow
 def test_score_degrades_when_hist_tool_unimportable(monkeypatch):
     """If surface_histogram couldn't be imported (reward.py sets _hist_sim=None), the
     hybrid must fall back to exact-only — identical to the no-hist path — even when
@@ -315,6 +321,7 @@ def test_score_degrades_when_hist_tool_unimportable(monkeypatch):
 
 # ── 11. empty/None candidate hist scores the histogram half LOW, not skipped ───
 
+@pytest.mark.slow
 def test_empty_candidate_hist_scores_low_not_skipped(monkeypatch):
     """A degenerate candidate (empty or all-zero histogram) against a real GT must
     score the histogram half at 0.0 (honest: it produced no classifiable faces), NOT
