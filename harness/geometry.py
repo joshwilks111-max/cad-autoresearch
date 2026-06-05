@@ -252,7 +252,7 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     maps to the same grid. Identical parts -> 1.0; the wrong bore / wrong length /
     wrong radius is still penalised because it shifts the (r, axial) occupancy.
 
-    Two subtleties make a self-comparison score EXACTLY 1.0 (and near-identical
+    Three subtleties make a self-comparison score EXACTLY 1.0 (and near-identical
     parts ~0.98 rather than a spurious ~0.62):
 
     1. SHARED (r, axial) frame. The radial and axial bin edges are derived from
@@ -262,7 +262,12 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     2. AXIAL-SIGN search. The symmetry axis is an eigenvector, whose SIGN is
        arbitrary, so one cloud's axial coordinate may run +z while the other runs
        -z (mirror grids that barely overlap). We try both signs for B and keep the
-       better IoU — a 2-way search, negligible cost."""
+       better IoU — a 2-way search, negligible cost.
+    3. AXIAL DE-JITTER (the 2026-06-04 fix; full rationale in the inline block
+       below). Coarser axial bins (32) + a BOTH-grid ±1 axial dilation
+       (_dilate_axial) absorb a thin part's tessellation z-jitter. Applied to BOTH
+       grids so a self-compare stays exactly 1.0 (one-grid dilation would break
+       self-identity)."""
     def project(p):
         p = p - p.mean(0)
         w, v = np.linalg.eigh(np.cov(p.T))

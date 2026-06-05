@@ -255,9 +255,11 @@ def _round_mesh(kind: str, od: float, bore: float, w: float):
             Cylinder(od / 2, w)
         part = bp.part
     fd, p = tempfile.mkstemp(suffix=".stl"); os.close(fd)
-    export_stl(part, p, tolerance=0.05)
-    m = trimesh.load(p, force="mesh"); os.unlink(p)
-    return m
+    try:                                          # try/finally so a tessellation
+        export_stl(part, p, tolerance=0.05)       # failure can't orphan the temp STL
+        return trimesh.load(p, force="mesh")      # (matches test_rib_shift_gradient.py)
+    finally:
+        os.unlink(p)
 
 
 @pytest.mark.slow
@@ -281,25 +283,34 @@ def test_round_part_iou_no_washer_inversion():
     # bearing_608 (OD22/bore8/w7) built two ways — same solid, different tessellation
     bear_a = _round_mesh("circle", 22, 8, 7)
     bear_b = _round_mesh("ellipse", 22, 8, 7)
-    assert G.iou(bear_a, bear_a) >= 0.999, "round self-identity must be 1.0"
+    assert G.iou(bear_a, bear_a) == 1.0, "round self-identity must be EXACTLY 1.0"
     assert G.iou(bear_a, bear_b) >= 0.95, "byte-equal round solids must score high"
 
     # thin washer (OD63/t3): correct cross-tessellation vs wrong bore (Ø42 not Ø32)
     wash_a = _round_mesh("circle", 63, 32, 3)
     wash_b = _round_mesh("ellipse", 63, 32, 3)
     wash_wrong = _round_mesh("circle", 63, 42, 3)
-    assert G.iou(wash_a, wash_a) >= 0.999
+    assert G.iou(wash_a, wash_a) == 1.0
     right = G.iou(wash_a, wash_b)
     wrong = G.iou(wash_a, wash_wrong)
-    assert right > wrong + 0.05, (
-        f"correct washer ({right:.3f}) must beat wrong-bore ({wrong:.3f}) — the inversion")
+    # Lock BOTH the ordering (no inversion) AND a ceiling on the wrong part, so a future
+    # axial-resolution change can't silently flatten the gradient (the /review erosion guard:
+    # 64→32 bins + dilation already cut the stepped gap ~0.51→0.26; this floors what's left).
+    assert right > wrong + 0.05 and wrong < 0.80, (
+        f"correct washer ({right:.3f}) must beat wrong-bore ({wrong:.3f}) AND wrong must stay "
+        f"< 0.80 — the inversion, plus a discrimination floor")
 
     # radial sharpness preserved: stepped shaft must NOT look like a plain cylinder
     step = _round_mesh("stepped", 20, 12, 10)        # Ø20×10 + Ø12×10
     plain = _round_mesh("plain", 20, 0, 20)          # Ø20×20, same envelope
-    assert G.iou(step, step) >= 0.999
-    assert G.iou(step, step) > G.iou(step, plain) + 0.05, (
-        "stepped vs plain must differ — radial-only would false-positive here")
+    step_self = G.iou(step, step)
+    step_vs_plain = G.iou(step, plain)
+    assert step_self == 1.0
+    # ceiling on step_vs_plain (not just the +0.05 gap) so the axial discrimination can't erode
+    # further unnoticed — see the /review ablation (stacking 32-bin + dilation halved this gap).
+    assert step_self > step_vs_plain + 0.05 and step_vs_plain < 0.80, (
+        f"stepped ({step_self:.3f}) vs plain ({step_vs_plain:.3f}) must differ AND plain must "
+        f"stay < 0.80 — radial-only would false-positive; a flattened gradient must fail here")
 
 
 def test_axial_dilation_does_not_wrap_across_ends():
@@ -330,6 +341,40 @@ def test_axial_dilation_does_not_wrap_across_ends():
     assert not d[1, 5] and not d[3, 5], "dilation must NOT cross radial rows (radial stays sharp)"
 
 
+def test_dilate_axial_is_actually_wired_into_grid():
+    """FAST guard that `grid()` inside `_cylindrical_iou` actually CALLS `_dilate_axial` —
+    the gap `/review` (mutation test) found: the washer pin is @slow, and the isolated
+    `test_axial_dilation_does_not_wrap_across_ends` stays green even if production stops
+    CALLING the helper. So a worker on the fast inner loop (`-m "not slow"`) could revert
+    the fix (delete the `_dilate_axial(g)` call site) and see no red. This pins the call.
+
+    Two THIN rings with a one-coarse-bin axial gap (sparse axial occupancy — the regime
+    where ±1 dilation is load-bearing, the synthetic analogue of voxelization z-jitter on a
+    real washer). Offsetting B by ~one 32-bin step leaves a one-bin gap the dilation must
+    bridge: WITH the call-site dilation the cross-cloud IoU is ~0.77; with it neutered it
+    collapses to ~0.45. Sub-second (no voxelize). Verified to go red on the call-site
+    removal before landing (it is not vacuous like a score that's 0.0 either way)."""
+    import numpy as np
+    from harness import geometry as G
+
+    def _two_ring(z0, z1, n=2000, seed=0):           # solid disc material at TWO axial planes
+        rng = np.random.default_rng(seed); R = 20.0; out = []
+        while len(out) < n:
+            x, y = rng.uniform(-R, R, 2)
+            if (x * x + y * y) ** 0.5 <= R:
+                out.append((x, y, float(rng.choice([z0, z1]))))
+        return np.array(out)
+
+    a = _two_ring(0.0, 2.0, seed=1)
+    b = _two_ring(0.06, 2.06, seed=2)                # ~one 32-bin axial step offset (2mm span)
+    val = G._cylindrical_iou(a, b)
+    # ~0.77 with the dilation wired in; ~0.45 if grid() stops calling _dilate_axial. The 0.6
+    # floor sits in the dead band between the two so a call-site removal flips this red.
+    assert val > 0.6, (
+        f"one-bin-offset sparse rings scored {val:.3f}; expected ~0.77 — is _dilate_axial "
+        f"still CALLED in grid()? (a call-site removal drops this to ~0.45)")
+
+
 @pytest.mark.slow
 def test_round_part_iou_shallow_groove_is_a_known_limitation():
     """DOCUMENTS (does not fail on) the metric-inherent insensitivity the /review flagged:
@@ -353,8 +398,11 @@ def test_round_part_iou_shallow_groove_is_a_known_limitation():
         with BuildPart(mode=Mode.ADD):
             Cylinder(14, 5)        # add the core back -> only the outer rim band is gone
     fd, p = tempfile.mkstemp(suffix=".stl"); os.close(fd)
-    export_stl(bp.part, p, tolerance=0.05)
-    grooved = trimesh.load(p, force="mesh"); os.unlink(p)
+    try:                                          # try/finally: the multi-step boolean
+        export_stl(bp.part, p, tolerance=0.05)    # (subtract slab + add core) is failure-prone,
+        grooved = trimesh.load(p, force="mesh")   # so guard the temp STL against orphaning
+    finally:
+        os.unlink(p)
     iou_gp = G.iou(grooved, plain_cyl)
     # EXPECTED: high (~0.95+) — the IoU layer does not see a shallow groove. This is the
     # documented limitation, not a bug. (Asserting > 0.85 keeps the test from being a no-op
