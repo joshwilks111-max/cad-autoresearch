@@ -60,6 +60,7 @@ def test_body_gate_fail_returns_well_formed_result():
     assert "siou=0.000" in s
 
 
+@pytest.mark.slow
 def test_identical_scores_high():
     gt_mesh, gt_sig = _gt()
     r = score(gt_mesh, gt_mesh, candidate_sig=gt_sig, gt_sig=gt_sig)
@@ -75,6 +76,7 @@ def test_identical_scores_high():
     assert r.composite > 0.95        # raised from 0.9 now that the IoU floor is gone
 
 
+@pytest.mark.slow
 def test_iou_identical_is_exactly_one():
     """The core P0.1 property in isolation: deterministic IoU of any solid mesh
     against itself is 1.0 (no RNG, no sampling floor)."""
@@ -110,6 +112,7 @@ def test_siou_discriminates_wrong_shape():
     assert siou_val < G.surface_iou(gt_cyl, gt_cyl) - 0.1
 
 
+@pytest.mark.slow
 def test_reward_result_has_siou():
     """The composite wiring exposes the new siou field + includes it in summary."""
     gt_mesh, gt_sig = _gt()
@@ -154,6 +157,7 @@ def test_adaptive_weighting_keys_on_gt_faces():
     assert abs(sum(rich.values()) - sum(base.values())) < 1e-9
 
 
+@pytest.mark.slow
 def test_wrong_size_scores_lower():
     gt_mesh, gt_sig = _gt()
     big = gt_mesh.copy()
@@ -164,6 +168,7 @@ def test_wrong_size_scores_lower():
     assert r_big.composite < r_id.composite
 
 
+@pytest.mark.slow
 def test_runner_builds_and_grades_monotonic():
     """Full integration: sandbox-run two candidates of increasing fidelity and
     confirm the better one scores higher."""
@@ -218,3 +223,190 @@ def test_runner_relative_workspace_does_not_double_path():
         os.chdir(prev)
     assert r.ok, f"relative workspace must build, not double the path; error={r.error!r}"
     assert r.error is None
+
+
+# --- round-part cylindrical-IoU regression (the 2026-06-04 washer-inversion fix) ---
+
+def _round_mesh(kind: str, od: float, bore: float, w: float):
+    """Build an annulus/stepped-shaft IN-TEST and return its trimesh (GT-free — these
+    are self-built primitives, never read from any ground_truth/). `kind`:
+    'circle' / 'ellipse' produce the SAME annulus via two tessellations (Circle vs
+    equal-radii Ellipse); 'stepped'/'plain' build axially-structured controls."""
+    import tempfile, os
+    from build123d import (BuildPart, BuildSketch, Circle, Ellipse, extrude, Plane,
+                           Mode, Cylinder, Align, Axis, export_stl)
+    if kind in ("circle", "ellipse"):
+        e = kind == "ellipse"
+        with BuildPart() as bp:
+            with BuildSketch(Plane.XY):
+                (Ellipse(od / 2, od / 2) if e else Circle(od / 2))
+                (Ellipse(bore / 2, bore / 2, mode=Mode.SUBTRACT) if e
+                 else Circle(bore / 2, mode=Mode.SUBTRACT))
+            extrude(amount=w)
+        part = bp.part
+    elif kind == "stepped":          # Ø(od)×(w) then Ø(bore)×(w) stacked along Z
+        with BuildPart() as bp:
+            Cylinder(od / 2, w, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            with BuildPart(bp.part.faces().sort_by(Axis.Z)[-1]):
+                Cylinder(bore / 2, w, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        part = bp.part
+    else:                            # 'plain' Ø(od)×(w)
+        with BuildPart() as bp:
+            Cylinder(od / 2, w)
+        part = bp.part
+    fd, p = tempfile.mkstemp(suffix=".stl"); os.close(fd)
+    try:                                          # try/finally so a tessellation
+        export_stl(part, p, tolerance=0.05)       # failure can't orphan the temp STL
+        return trimesh.load(p, force="mesh")      # (matches test_rib_shift_gradient.py)
+    finally:
+        os.unlink(p)
+
+
+@pytest.mark.slow
+def test_round_part_iou_no_washer_inversion():
+    """Regression for the 2026-06-04 cylindrical-IoU bug: a CORRECT round part scored
+    LOWER than a WRONG-bore one (the grader preferred wrong geometry), because the joint
+    (r, axial) grid was too axially sensitive for thin parts — a washer's ~3mm extent
+    over 64 axial bins scattered the same radial ring across bins for two tessellations,
+    and the axial-sign search landed a half-overlap. The fix: radial sharp (64 bins) +
+    axial coarse (32 bins) + ±1 axial dilation, in harness/geometry._cylindrical_iou.
+
+    There was NO round-part IoU test before this (the suite only used the prismatic
+    sample_bracket), which is why the bug shipped and survived multiple sessions. All
+    parts are built in-test, GT-free. Asserts, through the real G.iou entry point:
+      - bearing_608 cross-tessellation (Circle vs Ellipse, byte-DIFFERENT meshes) ≥0.95;
+      - a CORRECT washer scores clearly ABOVE a WRONG-bore one (the inversion);
+      - round-part self-identity is exactly 1.0 (the fix didn't break self-overlap);
+      - radial sharpness is preserved: a stepped shaft still beats a plain cylinder of
+        the same envelope (radial-only would false-positive here — the lossy trap)."""
+    from harness import geometry as G
+    # bearing_608 (OD22/bore8/w7) built two ways — same solid, different tessellation
+    bear_a = _round_mesh("circle", 22, 8, 7)
+    bear_b = _round_mesh("ellipse", 22, 8, 7)
+    assert G.iou(bear_a, bear_a) == 1.0, "round self-identity must be EXACTLY 1.0"
+    assert G.iou(bear_a, bear_b) >= 0.95, "byte-equal round solids must score high"
+
+    # thin washer (OD63/t3): correct cross-tessellation vs wrong bore (Ø42 not Ø32)
+    wash_a = _round_mesh("circle", 63, 32, 3)
+    wash_b = _round_mesh("ellipse", 63, 32, 3)
+    wash_wrong = _round_mesh("circle", 63, 42, 3)
+    assert G.iou(wash_a, wash_a) == 1.0
+    right = G.iou(wash_a, wash_b)
+    wrong = G.iou(wash_a, wash_wrong)
+    # Lock BOTH the ordering (no inversion) AND a ceiling on the wrong part, so a future
+    # axial-resolution change can't silently flatten the gradient (the /review erosion guard:
+    # 64→32 bins + dilation already cut the stepped gap ~0.51→0.26; this floors what's left).
+    assert right > wrong + 0.05 and wrong < 0.80, (
+        f"correct washer ({right:.3f}) must beat wrong-bore ({wrong:.3f}) AND wrong must stay "
+        f"< 0.80 — the inversion, plus a discrimination floor")
+
+    # radial sharpness preserved: stepped shaft must NOT look like a plain cylinder
+    step = _round_mesh("stepped", 20, 12, 10)        # Ø20×10 + Ø12×10
+    plain = _round_mesh("plain", 20, 0, 20)          # Ø20×20, same envelope
+    step_self = G.iou(step, step)
+    step_vs_plain = G.iou(step, plain)
+    assert step_self == 1.0
+    # ceiling on step_vs_plain (not just the +0.05 gap) so the axial discrimination can't erode
+    # further unnoticed — see the /review ablation (stacking 32-bin + dilation halved this gap).
+    assert step_self > step_vs_plain + 0.05 and step_vs_plain < 0.80, (
+        f"stepped ({step_self:.3f}) vs plain ({step_vs_plain:.3f}) must differ AND plain must "
+        f"stay < 0.80 — radial-only would false-positive; a flattened gradient must fail here")
+
+
+def test_axial_dilation_does_not_wrap_across_ends():
+    """Regression for the axial-dilation WRAP bug (caught in /review of the inversion fix):
+    the ±1 axial dilation must use SLICE shifts, NOT np.roll. A part's axial extent fills
+    bins 0..N-1 INCLUSIVE, so np.roll would wrap the top bin's material into the bottom bin
+    (and vice versa) — material at one axial extreme spuriously appears at the other.
+
+    Exercises the PRODUCTION helper `geometry._dilate_axial` directly (NOT a local copy —
+    a copy would pass even if production regressed to np.roll). A True cell in the LAST
+    axial column must dilate ONLY into its neighbour (col N-2), never wrap to col 0; same
+    for col 0. Also checks self-identity: dilation must be radial-axis-preserving so a grid
+    dilated == its own dilation (idempotent shape) — the dilation must not touch radial."""
+    import numpy as np
+    from harness.geometry import _dilate_axial
+    nb = 32
+    g = np.zeros((4, nb), dtype=bool)
+    g[0, 0] = True            # material at the LOW axial extreme
+    g[1, nb - 1] = True       # material at the HIGH axial extreme
+    g[2, 5] = True            # a mid-axial cell (radial row 2)
+    d = _dilate_axial(g)
+    # low-end cell spreads to col 1 only — NOT wrapping to the high end
+    assert d[0, 0] and d[0, 1] and not d[0, nb - 1], "low-end dilation must not wrap to the top"
+    # high-end cell spreads to col N-2 only — NOT wrapping to col 0
+    assert d[1, nb - 1] and d[1, nb - 2] and not d[1, 0], "high-end dilation must not wrap to the bottom"
+    # mid cell spreads to both axial neighbours, stays in its radial row (no radial bleed)
+    assert d[2, 4] and d[2, 5] and d[2, 6], "mid-axial cell must spread to both axial neighbours"
+    assert not d[1, 5] and not d[3, 5], "dilation must NOT cross radial rows (radial stays sharp)"
+
+
+def test_dilate_axial_is_actually_wired_into_grid():
+    """FAST guard that `grid()` inside `_cylindrical_iou` actually CALLS `_dilate_axial` —
+    the gap `/review` (mutation test) found: the washer pin is @slow, and the isolated
+    `test_axial_dilation_does_not_wrap_across_ends` stays green even if production stops
+    CALLING the helper. So a worker on the fast inner loop (`-m "not slow"`) could revert
+    the fix (delete the `_dilate_axial(g)` call site) and see no red. This pins the call.
+
+    Two THIN rings with a one-coarse-bin axial gap (sparse axial occupancy — the regime
+    where ±1 dilation is load-bearing, the synthetic analogue of voxelization z-jitter on a
+    real washer). Offsetting B by ~one 32-bin step leaves a one-bin gap the dilation must
+    bridge: WITH the call-site dilation the cross-cloud IoU is ~0.77; with it neutered it
+    collapses to ~0.45. Sub-second (no voxelize). Verified to go red on the call-site
+    removal before landing (it is not vacuous like a score that's 0.0 either way)."""
+    import numpy as np
+    from harness import geometry as G
+
+    def _two_ring(z0, z1, n=2000, seed=0):           # solid disc material at TWO axial planes
+        rng = np.random.default_rng(seed); R = 20.0; out = []
+        while len(out) < n:
+            x, y = rng.uniform(-R, R, 2)
+            if (x * x + y * y) ** 0.5 <= R:
+                out.append((x, y, float(rng.choice([z0, z1]))))
+        return np.array(out)
+
+    a = _two_ring(0.0, 2.0, seed=1)
+    b = _two_ring(0.06, 2.06, seed=2)                # ~one 32-bin axial step offset (2mm span)
+    val = G._cylindrical_iou(a, b)
+    # ~0.77 with the dilation wired in; ~0.45 if grid() stops calling _dilate_axial. The 0.6
+    # floor sits in the dead band between the two so a call-site removal flips this red.
+    assert val > 0.6, (
+        f"one-bin-offset sparse rings scored {val:.3f}; expected ~0.77 — is _dilate_axial "
+        f"still CALLED in grid()? (a call-site removal drops this to ~0.45)")
+
+
+@pytest.mark.slow
+def test_round_part_iou_shallow_groove_is_a_known_limitation():
+    """DOCUMENTS (does not fail on) the metric-inherent insensitivity the /review flagged:
+    the volumetric cylindrical IoU is ~insensitive to a SHALLOW external groove because the
+    groove removes a tiny volume band, so (r,z) occupancy barely changes — this holds at ANY
+    axial resolution, NOT a regression of the 32-bin fix. Shallow grooves are the TOPOLOGY +
+    CHAMFER layers' job, not IoU's. This test locks the EXPECTED behaviour so a future reader
+    doesn't 'fix' the IoU layer by sharpening axial bins (which re-breaks the washer inversion
+    for ~0.004 of groove signal). If a future change makes IoU groove-sensitive AND keeps the
+    washer fixed, update this test — that would be a genuine improvement."""
+    from harness import geometry as G
+    plain_cyl = _round_mesh("plain", 40, 0, 30)             # Ø40 × 30
+    # a grooved cylinder: same envelope, a shallow external groove removes ~a few % volume.
+    # Built as plain minus a thin outer band at mid-height (core added back).
+    import tempfile, os
+    from build123d import BuildPart, Cylinder, Mode, export_stl
+    with BuildPart() as bp:
+        Cylinder(20, 30)
+        with BuildPart(mode=Mode.SUBTRACT):
+            Cylinder(21, 5)        # remove a 5mm-tall slab to OD+1
+        with BuildPart(mode=Mode.ADD):
+            Cylinder(14, 5)        # add the core back -> only the outer rim band is gone
+    fd, p = tempfile.mkstemp(suffix=".stl"); os.close(fd)
+    try:                                          # try/finally: the multi-step boolean
+        export_stl(bp.part, p, tolerance=0.05)    # (subtract slab + add core) is failure-prone,
+        grooved = trimesh.load(p, force="mesh")   # so guard the temp STL against orphaning
+    finally:
+        os.unlink(p)
+    iou_gp = G.iou(grooved, plain_cyl)
+    # EXPECTED: high (~0.95+) — the IoU layer does not see a shallow groove. This is the
+    # documented limitation, not a bug. (Asserting > 0.85 keeps the test from being a no-op
+    # while encoding that groove-vs-plain is NOT well-discriminated by IoU alone.)
+    assert iou_gp > 0.85, (
+        f"shallow groove vs plain IoU={iou_gp:.3f}: expected HIGH (IoU is groove-insensitive "
+        f"by design — topology/chamfer layers catch grooves). If this dropped, the metric changed.")

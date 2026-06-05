@@ -221,6 +221,25 @@ def _is_rotationally_symmetric(pts: np.ndarray, tol: float = 0.05) -> bool:
         return False
 
 
+def _dilate_axial(g: np.ndarray) -> np.ndarray:
+    """Dilate a (radial, axial) occupancy grid by +/-1 bin along the AXIAL axis only
+    (axis=1); radial (axis=0) stays sharp. Each True cell also marks its two axial
+    neighbours, so a one-bin axial offset between two correct meshes still overlaps.
+
+    SLICE shifts, NOT np.roll: the part's axial extent fills bins 0..N-1 INCLUSIVE, so
+    np.roll would WRAP the top bin's material into the bottom bin (and vice versa),
+    making a feature at one axial end spuriously overlap a feature at the other end (a
+    flanged/asymmetric shaft would be mis-scored). Slice shifts drop the material that
+    would fall off either end instead of wrapping. `d = g.copy()` before the ORs so both
+    shifts read the ORIGINAL g (no cascade). Pure boolean — deterministic. Applied to
+    BOTH operands in _cylindrical_iou so a self-compare stays exactly 1.0 (dilating only
+    one grid breaks self-identity)."""
+    d = g.copy()
+    d[:, :-1] |= g[:, 1:]    # spread toward bin 0 (no wrap off the low end)
+    d[:, 1:] |= g[:, :-1]    # spread toward the top bin (no wrap off the high end)
+    return d
+
+
 def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     """Rotation-INVARIANT volumetric IoU about each cloud's symmetry axis.
 
@@ -233,7 +252,7 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     maps to the same grid. Identical parts -> 1.0; the wrong bore / wrong length /
     wrong radius is still penalised because it shifts the (r, axial) occupancy.
 
-    Two subtleties make a self-comparison score EXACTLY 1.0 (and near-identical
+    Three subtleties make a self-comparison score EXACTLY 1.0 (and near-identical
     parts ~0.98 rather than a spurious ~0.62):
 
     1. SHARED (r, axial) frame. The radial and axial bin edges are derived from
@@ -243,7 +262,12 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
     2. AXIAL-SIGN search. The symmetry axis is an eigenvector, whose SIGN is
        arbitrary, so one cloud's axial coordinate may run +z while the other runs
        -z (mirror grids that barely overlap). We try both signs for B and keep the
-       better IoU — a 2-way search, negligible cost."""
+       better IoU — a 2-way search, negligible cost.
+    3. AXIAL DE-JITTER (the 2026-06-04 fix; full rationale in the inline block
+       below). Coarser axial bins (32) + a BOTH-grid ±1 axial dilation
+       (_dilate_axial) absorb a thin part's tessellation z-jitter. Applied to BOTH
+       grids so a self-compare stays exactly 1.0 (one-grid dilation would break
+       self-identity)."""
     def project(p):
         p = p - p.mean(0)
         w, v = np.linalg.eigh(np.cov(p.T))
@@ -254,16 +278,39 @@ def _cylindrical_iou(pa: np.ndarray, pb: np.ndarray, nbins: int = 64) -> float:
         r = np.linalg.norm(p - np.outer(z, n), axis=1)
         return r, z
 
+    # 3. AXIAL de-jitter (the 2026-06-04 fix). The joint (r, axial) grid was too
+    #    axially sensitive for THIN symmetric parts: a washer's ~3mm extent binned over
+    #    64 axial bins scatters the SAME radial ring across different axial bins for two
+    #    independently-tessellated meshes (and the axial-sign search lands a half-overlap),
+    #    so a CORRECT washer scored ~0.49 while a WRONG-bore one scored ~0.71 — the grader
+    #    preferred the wrong part. Radial-only would fix the washer but FALSE-POSITIVE on
+    #    stepped shafts (radial structure that varies with axial position). The fix keeps
+    #    the joint grid but (a) bins AXIAL coarser (axial_bins=32, absorbs tessellation
+    #    z-jitter) while keeping RADIAL sharp (rbins=64, so wrong-bore + stepped variation
+    #    stay penalised), and (b) BOTH-grid +/-1 axial dilation via _dilate_axial (so a
+    #    one-bin axial offset between two correct meshes still overlaps AND a self-compare
+    #    stays exactly 1.0 — asymmetric/one-grid dilation breaks self-identity).
+    #    Verified GT-free: bearing_608 cross-tess 0.78->0.98, washer correct>wrong
+    #    (0.85>0.71), round/stepped self-identity 1.0, stepped right clearly > wrong/plain.
+    #    KNOWN LIMITATION (metric-inherent, not this fix): the volumetric IoU is ~insensitive
+    #    to a SHALLOW external groove/land (a circlip/O-ring groove removes a tiny volume
+    #    band, so (r,z) occupancy barely changes — groove-vs-plain ~0.96 at ANY axial
+    #    resolution incl. 64). Shallow grooves are caught by the TOPOLOGY + CHAMFER layers,
+    #    not IoU; do not try to recover them by sharpening axial bins (that re-breaks the
+    #    washer for ~0.004 of groove signal).
+    rbins = nbins          # radial: sharp (default 64) — wrong-bore / stepped detail
+    axial_bins = 32        # axial: coarser — absorbs thin-part tessellation z-jitter
+
     ra, za = project(pa)
     rb, zb = project(pb)
     rmax = max(ra.max(), rb.max()) or 1.0         # SHARED radial frame
 
     def grid(r, z, zlo, zspan):
-        ri = np.clip((r / rmax * (nbins - 1)).astype(int), 0, nbins - 1)
-        zi = np.clip(((z - zlo) / zspan * (nbins - 1)).astype(int), 0, nbins - 1)
-        g = np.zeros((nbins, nbins), dtype=bool)
+        ri = np.clip((r / rmax * (rbins - 1)).astype(int), 0, rbins - 1)
+        zi = np.clip(((z - zlo) / zspan * (axial_bins - 1)).astype(int), 0, axial_bins - 1)
+        g = np.zeros((rbins, axial_bins), dtype=bool)
         g[ri, zi] = True
-        return g
+        return _dilate_axial(g)
 
     best = 0.0
     for zbs in (zb, -zb):                          # axial-sign search
